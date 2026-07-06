@@ -10,27 +10,39 @@ import type { BadgeChannel } from '../../components/index.ts';
 import type { ApproveResult, ThreadDetail, ThreadMessage } from '../../data/types.ts';
 import { useClient } from '../../shell/ClientContext.tsx';
 import DraftCard from './DraftCard.tsx';
+import { SparkleIcon } from './icons.tsx';
 import {
   blockedReason,
   clockTime,
   dayKey,
   dayLabel,
+  firstNameOf,
   isSystemEvent,
   localTimeIn,
+  systemEventLabel,
 } from './inboxUtils.ts';
 import styles from './InboxScreen.module.css';
+
+// Who (if anyone) is currently typing in the selected conversation. null = idle.
+export type TypingState = { who: 'customer' | 'agent' } | null;
 
 export interface ThreadPaneProps {
   detail: ThreadDetail | undefined;
   loading: boolean;
   pendingDraft: ThreadMessage | undefined;
   playbookLabel: string;
+  // Live typing indicator for the selected conversation (from the event feed).
+  typing: TypingState;
+  // Whether sending is globally active (kill switch off) — gates the "Live" dot.
+  sendingActive: boolean;
   onApprove: (draftId: string) => Promise<ApproveResult>;
   onEdit: (draftId: string, body: string) => Promise<void>;
   onTakeover: () => Promise<void>;
   // Opens the context sheet — the button is CSS-hidden above 1100px, where the
   // rail is docked in the grid instead.
   onOpenContext: () => void;
+  // Opens the conversation-brief Inspector overlay.
+  onOpenBrief: () => void;
   // Mobile back chevron: clears ?c= to return to the triage list. CSS-hidden
   // above 768px, where both panes are visible side by side.
   onBack: () => void;
@@ -64,6 +76,18 @@ function SystemEntry({ message }: { message: ThreadMessage }) {
       </div>
     );
   }
+  // Opt-out / opt-back-in — a single calm centered entry (no duplicates, no
+  // footer): the timeline carries exactly one of each per state change.
+  const consentLabel = systemEventLabel(message);
+  if (consentLabel !== null) {
+    return (
+      <div className={styles.systemEntry}>
+        <div className={styles.systemInner}>
+          <span className={styles.systemLabel}>{consentLabel}</span>
+        </div>
+      </div>
+    );
+  }
   if (message.status === 'routed_to_human') {
     return (
       <div className={styles.systemEntry}>
@@ -85,6 +109,36 @@ function SystemEntry({ message }: { message: ThreadMessage }) {
     );
   }
   return null;
+}
+
+// The live typing-indicator bubble. Customer types on the left (inbound style,
+// --surface-2); the agent types on the right (outbound style, --accent-soft)
+// with a tiny "Agent · drafting" caption. Three dots pulse on a staggered
+// keyframe (disabled under prefers-reduced-motion via the global reset).
+function TypingBubble({ who }: { who: 'customer' | 'agent' }) {
+  const isAgent = who === 'agent';
+  return (
+    <div className={`${styles.bubbleRow} ${isAgent ? styles.outbound : styles.inbound}`}>
+      <div className={styles.bubbleGroup}>
+        <div
+          className={`${styles.typingBubble} ${isAgent ? styles.bubbleOut : styles.bubbleIn}`}
+          role="status"
+          aria-label={isAgent ? 'Agent is drafting a reply' : 'Customer is typing'}
+        >
+          <span className={styles.typingDots} aria-hidden="true">
+            <span className={styles.typingDot} />
+            <span className={styles.typingDot} />
+            <span className={styles.typingDot} />
+          </span>
+        </div>
+        {isAgent && (
+          <div className={styles.bubbleMeta}>
+            <span className={styles.typingCaption}>Agent · drafting</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function Bubble({ message }: { message: ThreadMessage }) {
@@ -131,10 +185,13 @@ export default function ThreadPane({
   loading,
   pendingDraft,
   playbookLabel,
+  typing,
+  sendingActive,
   onApprove,
   onEdit,
   onTakeover,
   onOpenContext,
+  onOpenBrief,
   onBack,
 }: ThreadPaneProps) {
   const client = useClient();
@@ -142,11 +199,12 @@ export default function ThreadPane({
   const conversationId = detail?.conversation.id;
   const messageCount = detail?.messages.length ?? 0;
 
-  // Auto-scroll to newest on load/change (new conversation, new message, new draft).
+  // Auto-scroll to newest on load/change (new conversation, new message, new
+  // draft — and when the typing indicator appears, so it stays pinned).
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [conversationId, messageCount, pendingDraft?.id, pendingDraft?.body]);
+  }, [conversationId, messageCount, pendingDraft?.id, pendingDraft?.body, typing?.who]);
 
   if (loading || detail === undefined) {
     return (
@@ -178,6 +236,13 @@ export default function ThreadPane({
   // in the DraftCard, not as a bubble. Group the rest by day.
   const timeline = messages.filter((m) => m.id !== pendingDraft?.id);
 
+  // The quiet "Live" presence signal: shown only when the thread is
+  // agent-controlled, not opted out, and sending is globally active.
+  const showLive =
+    conversation.controller === 'agent' && !detail.optedOut && sendingActive;
+
+  const firstName = firstNameOf(conversation.display_name);
+
   let lastDay = '';
 
   return (
@@ -199,6 +264,12 @@ export default function ThreadPane({
           </span>
         </div>
         <span className={styles.threadHeadSpacer} />
+        {showLive && (
+          <span className={styles.livePresence} aria-label="Live — the agent is watching this thread">
+            <span className={styles.liveDot} aria-hidden="true" />
+            Live
+          </span>
+        )}
         <span className={styles.threadHeadPill}>
           {detail.optedOut ? (
             <StatusPill tone="block">Opted out</StatusPill>
@@ -208,6 +279,14 @@ export default function ThreadPane({
             <StatusPill tone="neutral">Agent handling</StatusPill>
           )}
         </span>
+        <button
+          type="button"
+          className={styles.briefButton}
+          onClick={onOpenBrief}
+          aria-label="Conversation brief"
+        >
+          <SparkleIcon />
+        </button>
         <button
           type="button"
           className={styles.contextToggle}
@@ -220,12 +299,15 @@ export default function ThreadPane({
       </div>
 
       <div className={styles.threadScroll} ref={scrollRef}>
-        {timeline.map((m) => {
+        {timeline.map((m, i) => {
           const key = dayKey(m.created_at);
           const showDivider = key !== lastDay;
           lastDay = key;
+          // The newest bubble animates in (fade + 6px rise); prior ones don't
+          // re-animate on every render.
+          const isNewest = i === timeline.length - 1;
           return (
-            <div key={m.id}>
+            <div key={m.id} className={isNewest ? styles.animateIn : undefined}>
               {showDivider && (
                 <div className={styles.dayDivider}>
                   <span className={styles.dayLabel}>{dayLabel(m.created_at, client.now())}</span>
@@ -236,27 +318,41 @@ export default function ThreadPane({
           );
         })}
 
-        {detail.optedOut && (
-          <div className={styles.systemEntry}>
-            <div className={styles.systemInner}>
-              <GateReason reason="opted_out" variant="row" />
-            </div>
+        {/* Live typing indicator — customer or agent, from the event feed. */}
+        {typing !== null && (
+          <div className={styles.animateIn}>
+            <TypingBubble who={typing.who} />
           </div>
         )}
       </div>
 
-      {pendingDraft !== undefined && (
-        <DraftCard
-          draftId={pendingDraft.id}
-          body={pendingDraft.body}
-          playbookLabel={playbookLabel}
-          consents={detail.consents.map((c) => c.scope)}
-          timezone={conversation.timezone}
-          optedOut={detail.optedOut}
-          onApprove={onApprove}
-          onEdit={onEdit}
-          onTakeover={onTakeover}
-        />
+      {/* The draft card (when a reply awaits approval) OR, when opted out, a
+          single quiet hairline banner explaining the compliance boundary — no
+          business-side re-enable button (the boundary IS the product). */}
+      {detail.optedOut ? (
+        <div className={styles.optOutBanner}>
+          <span className={styles.optOutText}>
+            <span className={styles.optOutLead}>{firstName} opted out.</span> Only they can opt
+            back in — texting START restores transactional messages; marketing consent must be
+            re-collected.
+          </span>
+        </div>
+      ) : (
+        pendingDraft !== undefined && (
+          <div className={styles.animateIn}>
+            <DraftCard
+              draftId={pendingDraft.id}
+              body={pendingDraft.body}
+              playbookLabel={playbookLabel}
+              consents={detail.consents.map((c) => c.scope)}
+              timezone={conversation.timezone}
+              optedOut={detail.optedOut}
+              onApprove={onApprove}
+              onEdit={onEdit}
+              onTakeover={onTakeover}
+            />
+          </div>
+        )
       )}
     </section>
   );

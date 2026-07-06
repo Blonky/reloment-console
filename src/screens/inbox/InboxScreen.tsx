@@ -10,20 +10,23 @@
 //   - After approve / edit / takeover / simulateInbound we refetch the selected
 //     thread AND the discovery set so pills and ordering stay truthful.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useClient } from '../../shell/ClientContext.tsx';
 import { useData } from '../../data/useData.ts';
 import type {
   ApproveResult,
   Contact,
+  FeedEvent,
   QueueItem,
   ThreadBrief,
   ThreadMessage,
 } from '../../data/types.ts';
+import Inspector from '../../shell/Inspector.tsx';
 import TriagePane, { type TriageRowModel } from './TriagePane.tsx';
-import ThreadPane from './ThreadPane.tsx';
+import ThreadPane, { type TypingState } from './ThreadPane.tsx';
 import ContextRail from './ContextRail.tsx';
+import ConversationBrief from './ConversationBrief.tsx';
 import {
   previewText,
   triageTag,
@@ -196,6 +199,44 @@ export default function InboxScreen() {
     setDiscoveryNonce((n) => n + 1);
   }, []);
 
+  // Whether sending is globally active (kill switch off). Feeds the thread's
+  // quiet "Live" presence signal. consent.changed / mutations refresh it too.
+  const pulse = useData(() => client.home(), [client, discoveryNonce]);
+  const sendingActive = pulse.data ? !pulse.data.killSwitch : true;
+
+  // ── Live event feed ─────────────────────────────────────────────────────────
+  // A single subscription for the whole screen (unsubscribed on unmount). Events
+  // for the SELECTED conversation drive the thread live (refetch it — the store
+  // is authoritative) and set/clear the typing indicator; events for OTHER
+  // conversations refresh the triage list (preview/time/unread) via the nonce.
+  // typing state is per-conversation: keep a ref of the selected id so the stable
+  // handler always compares against the current selection.
+  const [typing, setTyping] = useState<TypingState>(null);
+  const selectedRef = useRef(selectedId);
+  selectedRef.current = selectedId;
+
+  useEffect(() => {
+    const unsubscribe = client.subscribe((e: FeedEvent) => {
+      const isSelected = e.conversationId === selectedRef.current;
+      if (e.type === 'typing') {
+        if (!isSelected) return; // typing only matters for the open thread
+        setTyping(e.state === 'typing' ? { who: e.who } : null);
+        return;
+      }
+      // A concrete event landed: clear any typing bubble for that party and
+      // reload. Selected → refetch the open thread (and discovery for the pill);
+      // other → refetch discovery so the triage row updates.
+      if (isSelected) setTyping(null);
+      refetchAll();
+    });
+    return unsubscribe;
+  }, [client, refetchAll]);
+
+  // Clear a stale typing bubble whenever the selection changes.
+  useEffect(() => {
+    setTyping(null);
+  }, [selectedId]);
+
   const onApprove = useCallback(
     async (draftId: string): Promise<ApproveResult> => {
       if (selectedId === null) throw new Error('no conversation selected');
@@ -240,6 +281,13 @@ export default function InboxScreen() {
     setContextSheetOpen(false);
   }, [selectedId]);
 
+  // Conversation brief overlay (the shared Inspector). Close it on selection
+  // change so it never renders a different conversation's brief.
+  const [briefOpen, setBriefOpen] = useState(false);
+  useEffect(() => {
+    setBriefOpen(false);
+  }, [selectedId]);
+
   // On mobile the cockpit is single-pane: showing the thread iff one is selected.
   const showThreadOnMobile = selectedId !== null;
 
@@ -259,10 +307,13 @@ export default function InboxScreen() {
         loading={threadLoading}
         pendingDraft={pendingDraft}
         playbookLabel={playbookLabelFor(pendingDraft)}
+        typing={typing}
+        sendingActive={sendingActive}
         onApprove={onApprove}
         onEdit={onEdit}
         onTakeover={onTakeover}
         onOpenContext={() => setContextSheetOpen(true)}
+        onOpenBrief={() => setBriefOpen(true)}
         onBack={onBack}
       />
       {/* Docked rail — the grid's third column; CSS hides it below 1100px. */}
@@ -288,6 +339,15 @@ export default function InboxScreen() {
           </div>
         </>
       )}
+
+      {/* Conversation brief — the shared Inspector overlay. */}
+      <Inspector
+        open={briefOpen && selectedId !== null}
+        onClose={() => setBriefOpen(false)}
+        title="Conversation brief"
+      >
+        {selectedId !== null && <ConversationBrief conversationId={selectedId} />}
+      </Inspector>
     </div>
   );
 }

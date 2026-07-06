@@ -373,6 +373,65 @@
   flex: 1;
 }
 
+/* Quiet "Live" presence signal — a 7px pulsing green dot + caption. Shown only
+   when the thread is agent-controlled, not opted out, and sending is active. */
+.livePresence {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+
+.liveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--ok);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent);
+  animation: thread-live-pulse 2s var(--ease) infinite;
+}
+
+@keyframes thread-live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--ok) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 0%, transparent);
+  }
+}
+
+/* Conversation-brief affordance — a quiet icon button in the thread header. */
+.briefButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.briefButton:hover {
+  box-shadow: var(--shadow-soft);
+  color: var(--accent);
+  border-color: var(--line-strong);
+}
+
 .threadScroll {
   flex: 1;
   min-height: 0;
@@ -502,6 +561,105 @@
 
 .systemLabel {
   font-weight: 550;
+  color: var(--ink);
+}
+
+/* New bubbles / drafts / typing indicator animate in: 6px rise + fade, ~180ms.
+   Disabled under prefers-reduced-motion by the global reset in theme.css. */
+.animateIn {
+  animation: thread-bubble-in 180ms var(--ease);
+}
+
+@keyframes thread-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Typing-indicator bubble — matches inbound/outbound bubble styling, three
+   6px dots (--ink at low opacity) pulsing on a staggered keyframe. */
+.typingBubble {
+  width: fit-content;
+  padding: 11px 14px;
+  border-radius: 14px;
+}
+
+.typingBubble.bubbleIn {
+  background: var(--surface-2);
+  border-bottom-left-radius: 5px;
+}
+
+.typingBubble.bubbleOut {
+  margin-left: auto;
+  background: var(--accent-soft);
+  border-bottom-right-radius: 5px;
+}
+
+.typingDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.typingDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ink);
+  opacity: 0.25;
+  animation: thread-typing-pulse 1.2s var(--ease) infinite;
+}
+
+.typingDot:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.typingDot:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes thread-typing-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.22;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 0.55;
+    transform: translateY(-2px);
+  }
+}
+
+.typingCaption {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+/* Opt-out banner — a single quiet hairline notice in place of the DraftCard.
+   No re-enable button: the compliance boundary is the product. */
+.optOutBanner {
+  flex: none;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  padding: 14px 20px;
+}
+
+.optOutText {
+  display: block;
+  max-width: 640px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.optOutLead {
+  font-weight: 600;
   color: var(--ink);
 }
 
@@ -645,6 +803,13 @@
   gap: 10px;
 }
 
+/* Tighter section — a smaller label + a single tight row of content. */
+.railSectionTight {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
 .railSectionTitle {
   font-size: 11px;
   font-weight: 600;
@@ -653,10 +818,23 @@
   color: var(--ink-2);
 }
 
+/* Smaller, calmer section label for the decluttered rail. */
+.railSectionLabel {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
 .railContactHead {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.railContactId {
+  min-width: 0;
 }
 
 .railContactName {
@@ -671,21 +849,16 @@
   color: var(--ink-2);
 }
 
-.factGrid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 6px 12px;
+/* ONE compact fact line: policy · renewal · local time. */
+.factLine {
   font-size: 12px;
-}
-
-.factKey {
-  color: var(--ink-2);
-}
-
-.factVal {
+  line-height: 1.5;
   color: var(--ink);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+}
+
+.factSep {
+  color: var(--ink-2);
+  margin: 0 6px;
 }
 
 .memoryList {
@@ -726,23 +899,7 @@
   color: var(--ink-2);
 }
 
-/* Simulate customer reply — demo affordance. */
-.simCard {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.simNote {
-  font-size: 12px;
-  color: var(--ink-2);
-  line-height: 1.45;
-}
-
+/* Simulate — a micro-label + input row + ghost chips (no boxed card). */
 .simInputRow {
   display: flex;
   gap: 8px;
@@ -752,7 +909,7 @@
   flex: 1;
   min-width: 0;
   padding: 7px 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
   font-size: 13px;
@@ -764,30 +921,45 @@
   border-color: var(--accent);
 }
 
-.simQuick {
+.simChips {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.stopChip {
+/* Ghost chips — white pills that lift on hover (per §4). */
+.simGhostChip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  border: 1px solid color-mix(in srgb, var(--block) 35%, var(--line));
-  border-radius: 999px;
-  background: var(--block-soft);
-  color: var(--block);
+  padding: 5px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   cursor: pointer;
-  transition: background var(--dur) var(--ease);
+  transition:
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
 }
 
-.stopChip:hover {
-  background: color-mix(in srgb, var(--block-soft) 80%, var(--block) 8%);
+.simGhostChip:hover {
+  box-shadow: var(--shadow-soft);
+}
+
+.simGhostChip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.simChipCaption {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-2);
 }
 
 .simHint {
@@ -905,4 +1077,153 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+}
+
+/* ── Conversation brief (inside the shared Inspector) ─────────────────────────── */
+.brief {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.briefSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.briefSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.briefLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.briefSummary {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.momentList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.momentItem {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.momentTime {
+  flex: none;
+  min-width: 58px;
+  font-size: 12px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.momentLabel {
+  min-width: 0;
+}
+
+.askInputRow {
+  display: flex;
+}
+
+.askInput {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 14px;
+  color: var(--ink);
+  transition: border-color var(--dur) var(--ease);
+}
+
+.askInput:focus-visible {
+  border-color: var(--accent);
+}
+
+.askChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Ghost chips — white pills that lift on hover (per §4). */
+.askChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.askChip:hover {
+  box-shadow: var(--shadow-soft);
+}
+
+.askChip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.qaList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.qaPair {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qaQuestion {
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--text-2, var(--ink-2));
+}
+
+.qaAnswer {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.qaCaption {
+  font-size: 11px;
+  color: var(--ink-2);
 }

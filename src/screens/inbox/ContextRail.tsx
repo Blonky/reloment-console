@@ -13,7 +13,7 @@ import {
 } from '../../components/index.ts';
 import type { ThreadDetail } from '../../data/types.ts';
 import { useClient } from '../../shell/ClientContext.tsx';
-import { localTimeIn, shortDate } from './inboxUtils.ts';
+import { firstNameOf, localTimeIn, shortDate } from './inboxUtils.ts';
 import { SendIcon } from './icons.tsx';
 import styles from './InboxScreen.module.css';
 
@@ -84,10 +84,13 @@ export default function ContextRail({
   }, [isSheet, onClose]);
 
   const paneClass = isSheet ? styles.sheetInner : `${styles.pane} ${styles.railPane}`;
-  const head = (
+  // Docked mode drops the "Context" pane title (§ decluttered — the rail's
+  // contact card already names what this is). Sheet mode keeps a slim header
+  // only to carry the close button.
+  const head = isSheet ? (
     <div className={styles.paneHead}>
       <span className={styles.paneTitle}>Context</span>
-      {isSheet && onClose !== undefined && (
+      {onClose !== undefined && (
         <button
           type="button"
           className={styles.sheetClose}
@@ -98,7 +101,7 @@ export default function ContextRail({
         </button>
       )}
     </div>
-  );
+  ) : null;
 
   async function send(text: string) {
     const body = text.trim();
@@ -125,36 +128,48 @@ export default function ContextRail({
 
   const { conversation, memory, consents } = detail;
   const renewal = shortDate(conversation.x_date);
+  const first = firstNameOf(conversation.display_name);
+  const ianaZone = conversation.timezone.split('/').pop()?.replaceAll('_', ' ') ?? conversation.timezone;
+  // ONE compact fact line: policy status · renewal · local time (IANA zone in a
+  // title tooltip on the time). Drops the 4-row grid + the Timezone row.
+  const facts = [
+    policyLabel(conversation.policy_status),
+    renewal !== null ? `Renews ${renewal}` : null,
+  ].filter((v): v is string => v !== null);
+  // Memory capped at 3 (§ debloat — the rail must fit unscrolled).
+  const memoryShown = memory.slice(0, 3);
 
   return (
     <aside className={paneClass} aria-label="Context">
       {head}
 
       <div className={styles.railScroll}>
-        {/* Contact card */}
+        {/* Contact block: avatar + name + LOB, then ONE compact fact line. */}
         <div className={styles.railSection}>
           <div className={styles.railContactHead}>
             <Avatar name={conversation.display_name} size="lg" />
-            <div>
+            <div className={styles.railContactId}>
               <div className={styles.railContactName}>{conversation.display_name}</div>
               <div className={styles.railContactSub}>{conversation.lob ?? 'No line of business'}</div>
             </div>
           </div>
-          <div className={styles.factGrid}>
-            <span className={styles.factKey}>Policy</span>
-            <span className={styles.factVal}>{policyLabel(conversation.policy_status)}</span>
-            <span className={styles.factKey}>Renewal</span>
-            <span className={`${styles.factVal} tnum`}>{renewal ?? '—'}</span>
-            <span className={styles.factKey}>Timezone</span>
-            <span className={styles.factVal}>{conversation.timezone.split('/').pop()?.replaceAll('_', ' ')}</span>
-            <span className={styles.factKey}>Local time</span>
-            <span className={`${styles.factVal} tnum`}>{localTimeIn(conversation.timezone, client.now())}</span>
+          <div className={styles.factLine}>
+            {facts.map((f, i) => (
+              <span key={i}>
+                {i > 0 && <span className={styles.factSep}>·</span>}
+                {f}
+              </span>
+            ))}
+            <span className={styles.factSep}>·</span>
+            <span className="tnum" title={`Timezone: ${conversation.timezone}`}>
+              {localTimeIn(conversation.timezone, client.now())} {ianaZone} time
+            </span>
           </div>
         </div>
 
-        {/* Consent */}
-        <div className={styles.railSection}>
-          <span className={styles.railSectionTitle}>Consent</span>
+        {/* Consent — a tight single row under a smaller label. */}
+        <div className={styles.railSectionTight}>
+          <span className={styles.railSectionLabel}>Consent</span>
           <ConsentChips
             consents={consents.map((c) => c.scope)}
             timezone={conversation.timezone}
@@ -162,14 +177,14 @@ export default function ContextRail({
           />
         </div>
 
-        {/* Memory */}
-        <div className={styles.railSection}>
-          <span className={styles.railSectionTitle}>Memory</span>
-          {memory.length === 0 ? (
-            <span className={styles.simHint}>No memory atoms recorded for this contact yet.</span>
+        {/* Memory — capped at 3, quiet bullets. */}
+        <div className={styles.railSectionTight}>
+          <span className={styles.railSectionLabel}>Memory</span>
+          {memoryShown.length === 0 ? (
+            <span className={styles.simHint}>No memory atoms recorded yet.</span>
           ) : (
             <ul className={styles.memoryList}>
-              {memory.map((atom, i) => (
+              {memoryShown.map((atom, i) => (
                 <li key={`${atom.source}-${i}`} className={styles.memoryItem}>
                   <span className={styles.memoryBullet} />
                   <span className={styles.memoryBody}>
@@ -184,49 +199,58 @@ export default function ContextRail({
           )}
         </div>
 
-        {/* Simulate customer reply — demo affordance */}
-        <div className={styles.railSection}>
-          <span className={styles.railSectionTitle}>Simulate customer reply</span>
-          <div className={styles.simCard}>
-            <p className={styles.simNote}>
-              Demo only — send a message as {conversation.display_name.split(' ')[0]} to watch the
-              governed loop respond in real time.
-            </p>
-            <div className={styles.simInputRow}>
-              <input
-                className={styles.simInput}
-                type="text"
-                value={draftReply}
-                placeholder="Type a reply…"
-                aria-label="Simulated customer message"
-                disabled={sending}
-                onChange={(e) => setDraftReply(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void send(draftReply);
-                }}
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                aria-label="Send simulated reply"
-                disabled={sending || draftReply.trim() === ''}
-                onClick={() => void send(draftReply)}
-              >
-                <SendIcon />
-              </Button>
-            </div>
-            <div className={styles.simQuick}>
+        {/* Simulate — a micro-label, an input row, and ghost chips. No boxed
+            card, no 3-line explainer (§ debloat). START shows only while opted
+            out; the compliance boundary is customer-only. */}
+        <div className={styles.railSectionTight}>
+          <span className={styles.railSectionLabel}>Simulate {first} · demo</span>
+          <div className={styles.simInputRow}>
+            <input
+              className={styles.simInput}
+              type="text"
+              value={draftReply}
+              placeholder="Type a reply as the customer…"
+              aria-label="Simulated customer message"
+              disabled={sending}
+              onChange={(e) => setDraftReply(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void send(draftReply);
+              }}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label="Send simulated reply"
+              disabled={sending || draftReply.trim() === ''}
+              onClick={() => void send(draftReply)}
+            >
+              <SendIcon />
+            </Button>
+          </div>
+          <div className={styles.simChips}>
+            <button
+              type="button"
+              className={styles.simGhostChip}
+              disabled={sending}
+              onClick={() => void send('STOP')}
+            >
+              STOP
+            </button>
+            {detail.optedOut && (
               <button
                 type="button"
-                className={styles.stopChip}
+                className={styles.simGhostChip}
                 disabled={sending}
-                onClick={() => void send('STOP')}
+                onClick={() => void send('START')}
               >
-                Send “STOP”
+                START
+                <span className={styles.simChipCaption}>opts back in</span>
               </button>
-              <span className={styles.simHint}>records an opt-out</span>
-            </div>
+            )}
           </div>
+          <span className={styles.simHint}>
+            {detail.optedOut ? 'Only the customer can opt back in.' : 'STOP records an opt-out.'}
+          </span>
         </div>
       </div>
     </aside>

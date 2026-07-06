@@ -241,6 +241,43 @@ Three-pane: **triage list (300px) | thread (flex) | context rail (280px)**.
   provenance), consent chips, and a demo-only "Simulate customer reply" input
   (with a STOP quick-chip) so the whole governed loop is demoable in-browser.
 
+#### Live thread (v3)
+
+The thread is driven by a **live event feed** on the DataClient, modeled on the
+provider's real-time delivery: `subscribe(handler) → unsubscribe`. The feed
+carries **notifications, not state** — every payload is also written to the
+store, so `thread()` / `queue()` reads stay the single source of truth.
+
+- **Event contract** (`FeedEvent`): `typing` (who: customer|agent,
+  state: typing|stopped), `message.received`, `draft.created`, `message.sent`,
+  `consent.changed`. HttpClient maps the provider's SSE stream
+  (`GET /api/v1/events/stream`, reconnect via `?since=<iso>`) — it connects an
+  `EventSource` lazily on first subscribe, maps `message.received` through, and
+  degrades to a silent no-op when no backend is present, closing when the last
+  subscriber leaves. DemoClient is an in-memory emitter.
+- **Typing-before-send choreography** (matches the provider's typing-indicator
+  guidance — "a UI signal before an agent or automation sends a follow-up"): on
+  a simulated inbound the customer types (~700ms) then the message lands; for a
+  normal message on an agent-controlled, not-opted-out thread the agent then
+  types (~900ms) and a **held draft** appears (~1400ms). `simulateInbound`
+  returns an ack immediately; the timers carry the payloads.
+- **Opt-out lifecycle** (Reloment's layer — the provider has no STOP/START
+  handling): a STOP keyword records **exactly one** system timeline entry
+  (`opted_out`) and one `consent.changed` per state change; a repeated STOP
+  records only the inbound bubble (no duplicate entry, no event). Only the
+  **customer** can opt back in via a START keyword, which restores
+  **transactional consent only** — marketing stays revoked (resuming does not
+  re-grant marketing express consent) — writing one `opted_back_in` entry and a
+  `consent.changed`. `message.sent` fires on approve so an open thread updates
+  live.
+- **Conversation brief** (`conversationBrief` / `askThread`): a brief is a 2–3
+  sentence recap composed deterministically from real thread state (contact +
+  product line, last inbound, current gate/consent state, what the agent did),
+  a list of timeline `moments`, and three canned `askSuggestions`. `askThread`
+  keyword-matches the question (summary / why-held / what-they-asked / next-step)
+  and answers **only** from the thread's real messages, consent, and gate
+  decisions — never invented facts.
+
 ### Home (`/`) — the command surface (Sauna-pattern, v2)
 
 A CENTERED command surface, not a dashboard grid. One scrollable centered

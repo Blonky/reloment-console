@@ -131,9 +131,23 @@ export function triageWeight(tag: TriageTag): number {
 export function isSystemEvent(m: ThreadMessage): boolean {
   if (m.status === 'routed_to_human') return true;
   if (m.status === 'held') return true;
+  if (m.status === 'opted_out') return true;
+  if (m.status === 'opted_back_in') return true;
   if (typeof m.status === 'string' && m.status.startsWith('blocked_')) return true;
   if (m.advice_verdict === 'advice_adjacent' && m.direction === 'outbound') return true;
   return false;
+}
+
+/** A calm centered timeline label for a system-event message, if it has one. */
+export function systemEventLabel(m: ThreadMessage): string | null {
+  if (m.status === 'opted_out') return 'Opted out — will never be texted again';
+  if (m.status === 'opted_back_in') return 'Opted back in — transactional messages resumed';
+  return null;
+}
+
+/** First name for narration ("Dana Whitfield" → "Dana"). */
+export function firstNameOf(fullName: string): string {
+  return fullName.split(' ')[0] ?? fullName;
 }
 
 /** The auditReason embedded in a dynamic `blocked_<reason>` status, if any. */

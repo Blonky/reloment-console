@@ -8,7 +8,9 @@ import type {
   BookRow,
   CampaignRow,
   Contact,
+  ConversationBrief,
   EnrollResult,
+  FeedEvent,
   HomePulse,
   InboundResult,
   LineAgent,
@@ -28,6 +30,11 @@ export interface DataClient {
   // gate decides (quiet hours); http returns the real clock.
   now(): number;
 
+  // Live event feed (models the provider's SSE stream). subscribe() returns an
+  // unsubscribe function; the feed carries notifications (typing, inbound,
+  // drafts, sends, consent changes), not the store — reads remain authoritative.
+  subscribe(handler: (e: FeedEvent) => void): () => void;
+
   // Home
   home(): Promise<HomePulse>;
 
@@ -46,6 +53,10 @@ export interface DataClient {
   threadBrief(contactId: string): Promise<ThreadBrief>;
   searchConversations(q: string): Promise<SearchHit[]>;
   setKillSwitch(on: boolean): Promise<void>;
+
+  // Conversation brief / ask-the-thread (grounded in real thread state).
+  conversationBrief(conversationId: string): Promise<ConversationBrief>;
+  askThread(conversationId: string, question: string): Promise<{ answer: string }>;
 
   // Read-model surfaces for the structured-skeleton screens.
   contacts(): Promise<Contact[]>;

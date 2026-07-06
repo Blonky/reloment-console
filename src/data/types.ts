@@ -47,12 +47,26 @@ export type MessageStatus =
   | 'routed_to_human'
   | 'sent'
   | 'held'
+  | 'opted_out'
+  | 'opted_back_in'
   | string; // blocked_<reason> is dynamic — keep the door open
 
 export type Direction = 'inbound' | 'outbound';
 
 // Delivered-as channel (message.channel_accepted). null before send.
 export type Channel = 'imessage' | 'rcs' | 'sms' | null;
+
+// ── Live event feed (models the provider's SSE stream) ──────────────────────
+// The provider delivers real-time inbound via a `message.received` event over
+// webhooks or an SSE stream; typing indicators are best-effort "UI signals
+// before an agent or automation sends a follow-up". consent.changed is
+// Reloment's own layer (the provider has no STOP/START keyword handling).
+export type FeedEvent =
+  | { type: 'typing'; conversationId: string; who: 'customer' | 'agent'; state: 'typing' | 'stopped' }
+  | { type: 'message.received'; conversationId: string; message: ThreadMessage }
+  | { type: 'draft.created'; conversationId: string; message: ThreadMessage }
+  | { type: 'message.sent'; conversationId: string; message: ThreadMessage }
+  | { type: 'consent.changed'; conversationId: string; contactId: string; optedOut: boolean };
 
 // ── /api/home ───────────────────────────────────────────────────────────────
 export interface HomePulse {
@@ -182,6 +196,14 @@ export interface ThreadBrief {
   contact: ThreadBriefContact;
   memory: { value: string }[];
   recent: ThreadBriefRecent[];
+}
+
+// ── Conversation brief (a plain-English recap + canned asks for a thread) ────
+// Derived deterministically from the thread's own state — never invented facts.
+export interface ConversationBrief {
+  summary: string; // 2–3 sentence plain-English recap
+  moments: { at: string; label: string }[]; // key timeline moments
+  askSuggestions: string[]; // 3 canned questions
 }
 
 // ── tools/search_conversations → SearchHit[] (flattened for the UI) ─────────

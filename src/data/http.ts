@@ -10,13 +10,16 @@ import type {
   BookRow,
   CampaignRow,
   Contact,
+  ConversationBrief,
   EnrollResult,
+  FeedEvent,
   HomePulse,
   InboundResult,
   QueueItem,
   SearchHit,
   ThreadBrief,
   ThreadDetail,
+  ThreadMessage,
   OutcomeRow,
   LineAgent,
 } from './types.ts';
@@ -32,6 +35,68 @@ export class HttpClient implements DataClient {
     private readonly baseUrl: string,
     private readonly tenantId: string,
   ) {}
+
+  // ── Live event feed (provider SSE feed) ─────────────────────────────────────
+  // Connect an EventSource to the provider's stream lazily on the first
+  // subscribe; map `message.received` events through to the FeedEvent shape.
+  // A missing backend degrades to a silent no-op; the source closes when the
+  // last unsubscriber leaves. Reconnect uses ?since=<iso> per the provider docs.
+  private feedHandlers = new Set<(e: FeedEvent) => void>();
+  private eventSource: EventSource | null = null;
+  private lastEventAt: string | null = null;
+
+  subscribe(handler: (e: FeedEvent) => void): () => void {
+    this.feedHandlers.add(handler);
+    this.ensureStream();
+    return () => {
+      this.feedHandlers.delete(handler);
+      if (this.feedHandlers.size === 0) this.closeStream();
+    };
+  }
+
+  private ensureStream(): void {
+    if (this.eventSource) return;
+    try {
+      const base = this.baseUrl.replace(/\/$/, '');
+      const since = this.lastEventAt ? `?since=${encodeURIComponent(this.lastEventAt)}` : '';
+      const es = new EventSource(`${base}/api/v1/events/stream${since}`);
+      // provider SSE feed: `message.received` carries an inbound ThreadMessage.
+      es.addEventListener('message.received', (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data) as {
+            conversationId: string;
+            message: ThreadMessage;
+            at?: string;
+          };
+          if (data.at) this.lastEventAt = data.at;
+          this.emit({
+            type: 'message.received',
+            conversationId: data.conversationId,
+            message: data.message,
+          });
+        } catch {
+          // Malformed frame — ignore rather than tear the stream down.
+        }
+      });
+      es.onerror = () => {
+        // Missing/failing backend: degrade to a silent no-op.
+        this.closeStream();
+      };
+      this.eventSource = es;
+    } catch {
+      // No EventSource / no backend — silent no-op.
+      this.eventSource = null;
+    }
+  }
+
+  private closeStream(): void {
+    this.eventSource?.close();
+    this.eventSource = null;
+  }
+
+  private emit(event: FeedEvent): void {
+    for (const h of this.feedHandlers) h(event);
+  }
 
   private async req<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(this.baseUrl.replace(/\/$/, '') + path, {
@@ -132,6 +197,27 @@ export class HttpClient implements DataClient {
 
   async setKillSwitch(on: boolean): Promise<void> {
     await this.post<{ ok: boolean; killSwitch: boolean }>('/api/tools/kill_switch', { on });
+  }
+
+  // Conversation brief / ask-the-thread. Graceful failure: a missing route
+  // returns an empty-but-honest brief rather than throwing at the UI.
+  async conversationBrief(conversationId: string): Promise<ConversationBrief> {
+    return this.req<ConversationBrief>(
+      `/api/v1/threads/${encodeURIComponent(conversationId)}/brief`,
+    ).catch(() => ({
+      summary: 'Brief unavailable — the backend has no brief for this conversation yet.',
+      moments: [],
+      askSuggestions: [],
+    }));
+  }
+
+  async askThread(conversationId: string, question: string): Promise<{ answer: string }> {
+    return this.post<{ answer: string }>(
+      `/api/v1/threads/${encodeURIComponent(conversationId)}/ask`,
+      { question },
+    ).catch(() => ({
+      answer: 'The backend could not answer this question right now.',
+    }));
   }
 
   // Read-model surfaces. The platform exposes these via the same governed reads;

@@ -55,3 +55,13 @@ export function PencilIcon({ size = 16 }: IconProps) {
     </svg>
   );
 }
+
+// Sparkle — the conversation-brief affordance (summary + ask-the-thread).
+export function SparkleIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3Z" />
+      <path d="M18.5 15.5l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7.7-1.9Z" />
+    </svg>
+  );
+}
