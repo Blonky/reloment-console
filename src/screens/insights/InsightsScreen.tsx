@@ -125,6 +125,7 @@ function Ledger({
 
   return (
     <Card title="Outcome ledger" padded={false}>
+      <div className={styles.tableScroll}>
       <Table>
         <THead>
           <TR>
@@ -162,6 +163,7 @@ function Ledger({
           </TR>
         </TBody>
       </Table>
+      </div>
       <p className={styles.ledgerNote}>
         Only causally-attributed outcomes are counted — no modeled or assumed revenue.
       </p>

@@ -4,6 +4,8 @@
   height: 100vh;
   overflow: hidden;
   background: var(--bg);
+  /* Never rubber-band the page behind the sticky Home composer / sticky topbar. */
+  overscroll-behavior-y: none;
 }
 
 .column {
@@ -17,6 +19,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* The document scroller — stop it rubber-banding past the composer / topbar. */
+  overscroll-behavior-y: none;
 }
 
 /* Flex column at min-height 100%: short screens can fill the viewport

@@ -790,7 +790,16 @@
   color: var(--block);
 }
 
-/* ── Narrow-viewport fallback ───────────────────────────────────────────── */
+/* ── Responsive: analytics band ─────────────────────────────────────────────
+   Below ~1160px viewport the 4-up stat row gets cramped once the sidebar eats
+   into the column, so it folds to a 2×2 grid. The 760px rule keeps 2-up on very
+   narrow viewports (same grid, tighter). */
+@media (max-width: 1160px) {
+  .statRow {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 @media (max-width: 760px) {
   .statRow {
     grid-template-columns: 1fr 1fr;

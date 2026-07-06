@@ -95,6 +95,7 @@ function OptOutLedger({
           <EmptyState message="No opt-outs recorded. Everyone in the book is still reachable within their consent scopes." />
         </div>
       ) : (
+        <div className={styles.tableScroll}>
         <Table>
           <THead>
             <TR>
@@ -122,6 +123,7 @@ function OptOutLedger({
             ))}
           </TBody>
         </Table>
+        </div>
       )}
     </Card>
   );
@@ -167,6 +169,7 @@ function AuditTrail({
           <EmptyState message="No audit entries yet." />
         </div>
       ) : (
+        <div className={styles.tableScroll}>
         <Table>
           <THead>
             <TR>
@@ -197,6 +200,7 @@ function AuditTrail({
             ))}
           </TBody>
         </Table>
+        </div>
       )}
     </Card>
   );

@@ -21,7 +21,18 @@ export interface ContextRailProps {
   detail: ThreadDetail | undefined;
   loading: boolean;
   onSimulate: (text: string) => Promise<void>;
+  // 'docked' (default): the right pane of the cockpit grid. 'sheet': the
+  // slide-over shown below 1100px; renders a close button, Escape closes.
+  variant?: 'docked' | 'sheet';
+  onClose?: () => void;
 }
+
+// Small ✕ glyph for the sheet header close button.
+const CloseIcon = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" aria-hidden="true">
+    <path d="M4 4l8 8M12 4l-8 8" />
+  </svg>
+);
 
 function policyLabel(status: string | null): string {
   if (status === null) return '—';
@@ -44,16 +55,50 @@ function RailSkeleton() {
   );
 }
 
-export default function ContextRail({ detail, loading, onSimulate }: ContextRailProps) {
+export default function ContextRail({
+  detail,
+  loading,
+  onSimulate,
+  variant = 'docked',
+  onClose,
+}: ContextRailProps) {
   const client = useClient();
   const [draftReply, setDraftReply] = useState('');
   const [sending, setSending] = useState(false);
   const conversationId = detail?.conversation.id;
+  const isSheet = variant === 'sheet';
 
   // Clear the composer when the selected conversation changes.
   useEffect(() => {
     setDraftReply('');
   }, [conversationId]);
+
+  // Sheet mode: Escape closes.
+  useEffect(() => {
+    if (!isSheet || onClose === undefined) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose!();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isSheet, onClose]);
+
+  const paneClass = isSheet ? styles.sheetInner : `${styles.pane} ${styles.railPane}`;
+  const head = (
+    <div className={styles.paneHead}>
+      <span className={styles.paneTitle}>Context</span>
+      {isSheet && onClose !== undefined && (
+        <button
+          type="button"
+          className={styles.sheetClose}
+          onClick={onClose}
+          aria-label="Close context"
+        >
+          {CloseIcon}
+        </button>
+      )}
+    </div>
+  );
 
   async function send(text: string) {
     const body = text.trim();
@@ -69,10 +114,8 @@ export default function ContextRail({ detail, loading, onSimulate }: ContextRail
 
   if (loading || detail === undefined) {
     return (
-      <aside className={`${styles.pane} ${styles.railPane}`} aria-label="Context">
-        <div className={styles.paneHead}>
-          <span className={styles.paneTitle}>Context</span>
-        </div>
+      <aside className={paneClass} aria-label="Context">
+        {head}
         <div className={styles.scroll}>
           <RailSkeleton />
         </div>
@@ -84,10 +127,8 @@ export default function ContextRail({ detail, loading, onSimulate }: ContextRail
   const renewal = shortDate(conversation.x_date);
 
   return (
-    <aside className={`${styles.pane} ${styles.railPane}`} aria-label="Context">
-      <div className={styles.paneHead}>
-        <span className={styles.paneTitle}>Context</span>
-      </div>
+    <aside className={paneClass} aria-label="Context">
+      {head}
 
       <div className={styles.railScroll}>
         {/* Contact card */}

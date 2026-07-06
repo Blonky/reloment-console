@@ -204,6 +204,13 @@ export default function InboxScreen() {
   const triageLoading = discovery.loading && discovery.data === undefined;
   const threadLoading = selectedId !== null && thread.loading && thread.data === undefined;
 
+  // Context sheet (shown <1100px). Close it whenever the selected thread changes
+  // so it never lingers over a different conversation.
+  const [contextSheetOpen, setContextSheetOpen] = useState(false);
+  useEffect(() => {
+    setContextSheetOpen(false);
+  }, [selectedId]);
+
   return (
     <div className={styles.cockpit}>
       <TriagePane
@@ -220,8 +227,31 @@ export default function InboxScreen() {
         onApprove={onApprove}
         onEdit={onEdit}
         onTakeover={onTakeover}
+        onOpenContext={() => setContextSheetOpen(true)}
       />
-      <ContextRail detail={detail} loading={threadLoading} onSimulate={onSimulate} />
+      {/* Docked rail — the grid's third column; CSS hides it below 1100px. */}
+      <div className={styles.railDocked}>
+        <ContextRail detail={detail} loading={threadLoading} onSimulate={onSimulate} />
+      </div>
+      {/* Context sheet — the same rail as a right slide-over below 1100px. */}
+      {contextSheetOpen && (
+        <>
+          <div
+            className={styles.sheetScrim}
+            onMouseDown={() => setContextSheetOpen(false)}
+            aria-hidden="true"
+          />
+          <div className={styles.sheet}>
+            <ContextRail
+              detail={detail}
+              loading={threadLoading}
+              onSimulate={onSimulate}
+              variant="sheet"
+              onClose={() => setContextSheetOpen(false)}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -15,6 +15,22 @@
   border-top: 1px solid var(--line);
 }
 
+/* ≤1280 viewport: the three-pane grid gets tight — trim the flanking panes so
+   the thread keeps room to breathe. */
+@media (max-width: 1280px) {
+  .cockpit {
+    grid-template-columns: 280px minmax(0, 1fr) 260px;
+  }
+}
+
+/* <1100: drop the context rail from the grid; it becomes a right-hand sheet
+   opened from the thread header's "Context" button. */
+@media (max-width: 1099px) {
+  .cockpit {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+}
+
 /* ── Shared pane chrome ─────────────────────────────────────────────────────── */
 .pane {
   min-width: 0;
@@ -36,6 +52,132 @@
 .railPane {
   border-left: 1px solid var(--line);
   background: var(--surface);
+}
+
+/* Below 1100px the rail is a grid child no longer — hide the docked instance so
+   only the sheet instance shows. Above, hide the sheet + its trigger. */
+.railDocked {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.railDocked > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.contextToggle {
+  display: none;
+}
+
+@media (max-width: 1099px) {
+  .railDocked {
+    display: none;
+  }
+
+  /* The "Context" button appears in the thread header only when the rail is a sheet. */
+  .contextToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    padding: 6px 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    font-size: 12px;
+    font-weight: 550;
+    color: var(--ink);
+    cursor: pointer;
+    transition:
+      box-shadow var(--dur) var(--ease),
+      border-color var(--dur) var(--ease);
+  }
+
+  .contextToggle:hover {
+    box-shadow: var(--shadow-soft);
+    border-color: var(--line-strong);
+  }
+}
+
+/* ── Context sheet (right slide-over, <1100px) ──────────────────────────────── */
+.sheetScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(28, 27, 23, 0.28);
+  animation: inbox-scrim-in var(--dur) var(--ease);
+}
+
+@keyframes inbox-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 21;
+  width: 320px;
+  max-width: 90vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-float);
+  animation: inbox-sheet-in var(--dur) var(--ease);
+}
+
+@keyframes inbox-sheet-in {
+  from {
+    transform: translateX(16px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* The rail's <aside> when it lives inside the sheet — fills it, scrolls inside. */
+.sheetInner {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.sheetClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.sheetClose:hover {
+  background: rgba(28, 27, 23, 0.05);
+  color: var(--ink);
 }
 
 .paneHead {

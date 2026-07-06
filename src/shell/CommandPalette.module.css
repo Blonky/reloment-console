@@ -1,0 +1,200 @@
+/* Command palette (⌘K) — a centered top-third floating card per DESIGN.md §4.
+   UI voice (Inter), never serif. Portal-rendered over a scrim. Tokens only. */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(28, 27, 23, 0.28);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 14vh 20px 20px;
+  animation: palette-scrim-in var(--dur) var(--ease);
+}
+
+@keyframes palette-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.card {
+  width: 100%;
+  max-width: 560px;
+  max-height: 62vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+  animation: palette-card-in var(--dur) var(--ease);
+}
+
+@keyframes palette-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Input row with a leading search icon. */
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.searchIcon {
+  color: var(--ink-2);
+  display: inline-flex;
+  flex: none;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.input:focus,
+.input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.input::placeholder {
+  color: var(--ink-2);
+}
+
+/* Results list — scrolls within the card. */
+.results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+}
+
+.groupKicker {
+  padding: 10px 10px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+
+.row:hover {
+  background: rgba(28, 27, 23, 0.04);
+}
+
+/* Keyboard selection — accent-soft, per §4. */
+.rowActive,
+.rowActive:hover {
+  background: var(--accent-soft);
+}
+
+.rowIcon {
+  flex: none;
+  display: inline-flex;
+  color: var(--ink-2);
+}
+
+.rowActive .rowIcon {
+  color: var(--accent);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rowLabel {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowKicker {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* Footer with kbd hints in surface-2 pills. */
+.footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}

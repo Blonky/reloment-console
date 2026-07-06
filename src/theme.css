@@ -86,12 +86,43 @@ body,
   min-height: 100%;
 }
 
+/* Styled scrollbars — thin, warm, transparent track. Applied to every scroll
+   container so the chrome matches the paper surface, not the OS default. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(28, 27, 23, 0.18) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(28, 27, 23, 0.18);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(28, 27, 23, 0.28);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 body {
   background: var(--bg);
   color: var(--ink);
 }
 
-/* Headings use the display treatment sparingly; screens set sizes locally. */
+/* Headings use the display treatment sparingly; screens set sizes locally.
+   text-wrap: balance evens out ragged display lines (safe progressive
+   enhancement — ignored where unsupported). */
 h1,
 h2,
 h3,
@@ -100,6 +131,7 @@ h4 {
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--ink);
+  text-wrap: balance;
 }
 
 p {
@@ -163,14 +195,16 @@ textarea:focus-visible {
   }
 }
 
-/* Reduced motion: kill the shimmer sweep and transitions. */
+/* Reduced motion: disable all animations and transitions (the standard reset —
+   kills the shimmer sweep, transcript fade-slides, hover lifts, and the palette
+   entrance for users who ask the OS to reduce motion). */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
+    animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

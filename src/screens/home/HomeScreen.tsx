@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useClient, useKillSwitch } from '../../shell/ClientContext.tsx';
 import { useData } from '../../data/useData.ts';
 import type { Contact, HomePulse } from '../../data/types.ts';
@@ -137,6 +138,7 @@ function resolveContact(name: string, contacts: Contact[]): Contact | null {
 export default function HomeScreen() {
   const client = useClient();
   const { setKillSwitch } = useKillSwitch();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Pulse — refetched after mutating commands so the tiles react live.
   const pulse = useData(() => client.home(), [client]);
@@ -307,6 +309,28 @@ export default function HomeScreen() {
     },
     [busy, dispatch, resolveThinking],
   );
+
+  // Command-palette deep link: when arriving at /?cmd=<phrase> (from the ⌘K
+  // palette's "Commands" group), submit the phrase through the real command
+  // path so it renders as a governed turn, then strip the param via history
+  // replace. Fires once per distinct cmd value.
+  const consumedCmdRef = useRef<string | null>(null);
+  const cmd = searchParams.get('cmd');
+  useEffect(() => {
+    if (cmd === null || cmd.trim() === '') return;
+    if (consumedCmdRef.current === cmd) return;
+    consumedCmdRef.current = cmd;
+    void submit(cmd);
+    // Strip ?cmd from the URL without adding a history entry.
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('cmd');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [cmd, submit, setSearchParams]);
 
   // Auto-grow the textarea to its content, capped by CSS max-height.
   const onInput = (e: React.FormEvent<HTMLTextAreaElement>) => {

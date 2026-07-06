@@ -28,7 +28,19 @@ export interface ThreadPaneProps {
   onApprove: (draftId: string) => Promise<ApproveResult>;
   onEdit: (draftId: string, body: string) => Promise<void>;
   onTakeover: () => Promise<void>;
+  // Opens the context sheet — the button is CSS-hidden above 1100px, where the
+  // rail is docked in the grid instead.
+  onOpenContext: () => void;
 }
+
+// Small info glyph for the "Context" toggle button (shown <1100px).
+const ContextIcon = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="8" cy="8" r="6" />
+    <path d="M8 7.5v3" />
+    <path d="M8 5.2v0.2" />
+  </svg>
+);
 
 // System timeline entry text — plain-English, calm.
 function SystemEntry({ message }: { message: ThreadMessage }) {
@@ -112,6 +124,7 @@ export default function ThreadPane({
   onApprove,
   onEdit,
   onTakeover,
+  onOpenContext,
 }: ThreadPaneProps) {
   const client = useClient();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -166,6 +179,15 @@ export default function ThreadPane({
         ) : (
           <StatusPill tone="neutral">Agent handling</StatusPill>
         )}
+        <button
+          type="button"
+          className={styles.contextToggle}
+          onClick={onOpenContext}
+          aria-label="Open context panel"
+        >
+          {ContextIcon}
+          Context
+        </button>
       </div>
 
       <div className={styles.threadScroll} ref={scrollRef}>

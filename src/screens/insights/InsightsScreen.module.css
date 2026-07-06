@@ -61,6 +61,11 @@
 }
 
 /* ── ledger ──────────────────────────────────────────────────── */
+/* Wide table scrolls inside its own container — the page never scrolls sideways. */
+.tableScroll {
+  overflow-x: auto;
+}
+
 .ledgerSkeleton {
   display: flex;
   flex-direction: column;

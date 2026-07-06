@@ -25,6 +25,11 @@
   color: var(--ink-2);
 }
 
+/* Wide table scrolls inside its own container — the page never scrolls sideways. */
+.tableScroll {
+  overflow-x: auto;
+}
+
 /* intro line inside a flush (padded={false}) card, above its table */
 .cardIntro {
   font-size: 12.5px;
