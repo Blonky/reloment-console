@@ -6,14 +6,12 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Avatar,
   Button,
   ConsentChips,
   Skeleton,
 } from '../../components/index.ts';
 import type { ThreadDetail } from '../../data/types.ts';
-import { useClient } from '../../shell/ClientContext.tsx';
-import { firstNameOf, localTimeIn, shortDate } from './inboxUtils.ts';
+import { firstNameOf, shortDate } from './inboxUtils.ts';
 import { SendIcon } from './icons.tsx';
 import styles from './InboxScreen.module.css';
 
@@ -21,11 +19,21 @@ export interface ContextRailProps {
   detail: ThreadDetail | undefined;
   loading: boolean;
   onSimulate: (text: string) => Promise<void>;
+  // Demo: ask the customer for a document; the reply lands as a media part.
+  onRequestDocument: (docType: string) => Promise<void>;
   // 'docked' (default): the right pane of the cockpit grid. 'sheet': the
   // slide-over shown below 1100px; renders a close button, Escape closes.
   variant?: 'docked' | 'sheet';
   onClose?: () => void;
 }
+
+// The three offered document types (§7). Chip label → docType passed to the
+// request; the client crafts a realistic media reply per type.
+const DOC_TYPES: { label: string; docType: string }[] = [
+  { label: 'Dec page', docType: 'declarations page' },
+  { label: "Driver's license", docType: "driver's license" },
+  { label: 'Damage photos', docType: 'photos of the damage' },
+];
 
 // Small ✕ glyph for the sheet header close button.
 const CloseIcon = (
@@ -59,12 +67,13 @@ export default function ContextRail({
   detail,
   loading,
   onSimulate,
+  onRequestDocument,
   variant = 'docked',
   onClose,
 }: ContextRailProps) {
-  const client = useClient();
   const [draftReply, setDraftReply] = useState('');
   const [sending, setSending] = useState(false);
+  const [requesting, setRequesting] = useState(false);
   const conversationId = detail?.conversation.id;
   const isSheet = variant === 'sheet';
 
@@ -72,6 +81,16 @@ export default function ContextRail({
   useEffect(() => {
     setDraftReply('');
   }, [conversationId]);
+
+  async function requestDoc(docType: string) {
+    if (requesting) return;
+    setRequesting(true);
+    try {
+      await onRequestDocument(docType);
+    } finally {
+      setRequesting(false);
+    }
+  }
 
   // Sheet mode: Escape closes.
   useEffect(() => {
@@ -129,10 +148,11 @@ export default function ContextRail({
   const { conversation, memory, consents } = detail;
   const renewal = shortDate(conversation.x_date);
   const first = firstNameOf(conversation.display_name);
-  const ianaZone = conversation.timezone.split('/').pop()?.replaceAll('_', ' ') ?? conversation.timezone;
-  // ONE compact fact line: policy status · renewal · local time (IANA zone in a
-  // title tooltip on the time). Drops the 4-row grid + the Timezone row.
+  // The thread header already carries name + local time, so the rail leads with
+  // the policy facts the header can't show: LOB · policy status · renewal.
+  // Avatar/name and the local-time are dropped here (no cross-pane repetition).
   const facts = [
+    conversation.lob,
     policyLabel(conversation.policy_status),
     renewal !== null ? `Renews ${renewal}` : null,
   ].filter((v): v is string => v !== null);
@@ -144,15 +164,9 @@ export default function ContextRail({
       {head}
 
       <div className={styles.railScroll}>
-        {/* Contact block: avatar + name + LOB, then ONE compact fact line. */}
-        <div className={styles.railSection}>
-          <div className={styles.railContactHead}>
-            <Avatar name={conversation.display_name} size="lg" />
-            <div className={styles.railContactId}>
-              <div className={styles.railContactName}>{conversation.display_name}</div>
-              <div className={styles.railContactSub}>{conversation.lob ?? 'No line of business'}</div>
-            </div>
-          </div>
+        {/* Policy facts — what the thread header doesn't show. One quiet line. */}
+        <div className={styles.railSectionTight}>
+          <span className={styles.railSectionLabel}>Policy</span>
           <div className={styles.factLine}>
             {facts.map((f, i) => (
               <span key={i}>
@@ -160,10 +174,6 @@ export default function ContextRail({
                 {f}
               </span>
             ))}
-            <span className={styles.factSep}>·</span>
-            <span className="tnum" title={`Timezone: ${conversation.timezone}`}>
-              {localTimeIn(conversation.timezone, client.now())} {ianaZone} time
-            </span>
           </div>
         </div>
 
@@ -251,6 +261,26 @@ export default function ContextRail({
           <span className={styles.simHint}>
             {detail.optedOut ? 'Only the customer can opt back in.' : 'STOP records an opt-out.'}
           </span>
+        </div>
+
+        {/* Request a document — three ghost chips. The ask is gated (a silent
+            no-op if opted out); on a clear gate the customer replies with a
+            media part that lands as an attachment chip in the thread. */}
+        <div className={styles.railSectionTight}>
+          <span className={styles.railSectionLabel}>Request a document · demo</span>
+          <div className={styles.simChips}>
+            {DOC_TYPES.map((d) => (
+              <button
+                key={d.docType}
+                type="button"
+                className={styles.simGhostChip}
+                disabled={requesting}
+                onClick={() => void requestDoc(d.docType)}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </aside>

@@ -135,6 +135,9 @@ function Ledger({
     <Card title="Outcome ledger" padded={false} className={styles.ledgerCard}>
       <div className={styles.ledgerScroll}>
       <div className={styles.tableScroll}>
+      {/* The causally-attributed honesty note lives once, on the hero figure
+          (§6). Repeating it here and in the page sub was three copies of one
+          claim — cut to a single instance. */}
       <Table>
         <THead>
           <TR>
@@ -174,9 +177,6 @@ function Ledger({
       </Table>
       </div>
       </div>
-      <p className={styles.ledgerNote}>
-        Only causally-attributed outcomes are counted — no modeled or assumed revenue.
-      </p>
     </Card>
   );
 }
@@ -190,7 +190,7 @@ export default function InsightsScreen() {
     <div className={styles.page}>
       <header className={styles.pageHead}>
         <h1 className={styles.title}>Insights</h1>
-        <p className={styles.sub}>What the agents recovered — proven, not projected.</p>
+        <p className={styles.sub}>What the agents recovered for the book.</p>
       </header>
 
       {/* Top row: hero recovered card (1fr) | chart card (2fr, ≤240px tall). */}

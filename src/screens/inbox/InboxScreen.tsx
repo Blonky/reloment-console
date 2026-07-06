@@ -7,8 +7,8 @@
 //     threadBrief, which returns each contact's conversationId) merged with the
 //     live queue() so awaiting-approval rows carry the right tag and sort first.
 //   - Selection is URL state (?c=<conversationId>) so threads deep-link.
-//   - After approve / edit / takeover / simulateInbound we refetch the selected
-//     thread AND the discovery set so pills and ordering stay truthful.
+//   - After approve / send / toggle / simulateInbound we refetch the selected
+//     thread, the suggestion, AND the discovery set so pills/ordering stay true.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -19,8 +19,8 @@ import type {
   Contact,
   FeedEvent,
   QueueItem,
+  Suggestion,
   ThreadBrief,
-  ThreadMessage,
 } from '../../data/types.ts';
 import Inspector from '../../shell/Inspector.tsx';
 import TriagePane, { type TriageRowModel } from './TriagePane.tsx';
@@ -28,29 +28,13 @@ import ThreadPane, { type TypingState } from './ThreadPane.tsx';
 import ContextRail from './ContextRail.tsx';
 import ConversationBrief from './ConversationBrief.tsx';
 import {
+  MISSED_CALL_MARKER,
   previewText,
   triageTag,
   triageWeight,
   type TriageTag,
 } from './inboxUtils.ts';
 import styles from './InboxScreen.module.css';
-
-// Playbook labels for the DraftCard "from …" line, keyed by the draft id prefix
-// the DemoClient mints (msg_pb_<playbookKey>_…) with a fallback for seeded drafts.
-const PLAYBOOK_LABELS: Record<string, string> = {
-  renewal_reminder: 'Renewal reminder',
-  speed_to_lead: 'Speed to lead',
-  winback_lapsed: 'Win back lapsed quotes',
-};
-
-function playbookLabelFor(draft: ThreadMessage | undefined): string {
-  if (draft === undefined) return 'Renewal reminder';
-  // Playbook-minted drafts encode their key: msg_pb_<playbookKey>_ct_<contact>.
-  const m = /^msg_pb_([a-z_]+?)_ct_/.exec(draft.id);
-  if (m !== null && PLAYBOOK_LABELS[m[1]] !== undefined) return PLAYBOOK_LABELS[m[1]];
-  // Seeded drafts (e.g. Dana's renewal reminder) don't carry a playbook key.
-  return 'Renewal reminder';
-}
 
 interface Discovery {
   contacts: Contact[];
@@ -121,12 +105,18 @@ export default function InboxScreen() {
       const convId = brief.conversationId;
       const last = brief.recent[0]; // recent is newest-first
       const wonBack = c.memory.some((m) => m.value.toLowerCase().includes('won back'));
+      // Session-minted missed-call conversation (Ray) — detected by the marker
+      // its opening system entry carries, so it tags as "Missed call".
+      const missedCall = brief.recent.some((m) =>
+        m.body.toLowerCase().includes(MISSED_CALL_MARKER),
+      );
 
       const tag: TriageTag = triageTag({
         optedOut: c.optedOut,
         hasPendingDraft: pendingByConv.has(convId),
         routedToHuman: routedByConv.has(convId),
         wonBack,
+        missedCall,
         lastDirection: last?.direction ?? null,
       });
 
@@ -136,8 +126,9 @@ export default function InboxScreen() {
         name: c.display_name,
         preview: last ? previewText(last.body) : 'No messages yet',
         lastAt: last?.created_at ?? c.lastActivity,
-        // Unread = an inbound the operator hasn't actioned (pending or routed).
-        unread: pendingByConv.has(convId) || routedByConv.has(convId),
+        // Unread = an inbound the operator hasn't actioned (pending or routed),
+        // or a fresh missed-call text-back that just landed.
+        unread: pendingByConv.has(convId) || routedByConv.has(convId) || missedCall,
         tag,
         weight: triageWeight(tag),
       });
@@ -188,13 +179,40 @@ export default function InboxScreen() {
 
   const detail = thread.data ?? undefined;
 
-  const pendingDraft = useMemo<ThreadMessage | undefined>(
-    () => detail?.messages.find((m) => m.status === 'awaiting_approval'),
-    [detail],
-  );
+  // ── The agent's next-best message for the suggestion slot ────────────────────
+  // Refetched on conversation change and after every 'suggestion.updated' for the
+  // selected conversation (a nonce bump). null = silence (opted out / pushy) →
+  // the slot renders nothing and the composer stands alone.
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  // Track which conversation the current suggestion belongs to. On a selection
+  // change we CLEAR the slot synchronously (below) so thread B never flashes
+  // thread A's card during the ~250ms refetch.
+  const suggestionConvRef = useRef(selectedId);
+  // Clear immediately when the selection changes — before the async refetch —
+  // so a stale suggestion from the previous thread never shows for a beat.
+  if (suggestionConvRef.current !== selectedId) {
+    suggestionConvRef.current = selectedId;
+    if (suggestion !== null) setSuggestion(null);
+  }
+  useEffect(() => {
+    if (selectedId === null) {
+      setSuggestion(null);
+      return;
+    }
+    let live = true;
+    void client.suggestion(selectedId).then((s) => {
+      // The cleanup flips `live` on any selection change, so a late resolve for
+      // the previous conversation is discarded — no cross-thread leak.
+      if (live) setSuggestion(s);
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, selectedId, discoveryNonce]);
 
-  // Refetch discipline: bump the nonce so discovery (queue + briefs + tags) and
-  // the thread detail both reload after any mutation.
+  // Refetch discipline: bump the nonce so discovery (queue + briefs + tags), the
+  // thread detail, and the suggestion all reload after any mutation.
   const refetchAll = useCallback(() => {
     setDiscoveryNonce((n) => n + 1);
   }, []);
@@ -223,6 +241,17 @@ export default function InboxScreen() {
         setTyping(e.state === 'typing' ? { who: e.who } : null);
         return;
       }
+      // A missed call mints a NEW conversation. Refresh triage so it appears,
+      // and — so the operator WATCHES the text-back choreography — auto-select
+      // it when nothing is open yet (deep links / an already-open thread win).
+      if (e.type === 'call.missed') {
+        refetchAll();
+        if (selectedRef.current === null) {
+          selectedRef.current = e.conversationId; // avoid a re-select race
+          setSearchParams({ c: e.conversationId });
+        }
+        return;
+      }
       // A concrete event landed: clear any typing bubble for that party and
       // reload. Selected → refetch the open thread (and discovery for the pill);
       // other → refetch discovery so the triage row updates.
@@ -230,7 +259,7 @@ export default function InboxScreen() {
       refetchAll();
     });
     return unsubscribe;
-  }, [client, refetchAll]);
+  }, [client, refetchAll, setSearchParams]);
 
   // Clear a stale typing bubble whenever the selection changes.
   useEffect(() => {
@@ -247,20 +276,30 @@ export default function InboxScreen() {
     [client, selectedId, refetchAll],
   );
 
-  const onEdit = useCallback(
-    async (draftId: string, body: string): Promise<void> => {
-      if (selectedId === null) return;
-      await client.edit(selectedId, draftId, body);
+  // A free-text composer send as the business (sendManual). Same fail-closed
+  // gate as approve; a human send never changes agent_enabled and clears any
+  // stale held draft (the data layer handles both). Resolves false when blocked
+  // so the composer keeps the text.
+  const onSend = useCallback(
+    async (body: string): Promise<boolean> => {
+      if (selectedId === null) return false;
+      const res = await client.sendManual(selectedId, body);
       refetchAll();
+      return res.ok;
     },
     [client, selectedId, refetchAll],
   );
 
-  const onTakeover = useCallback(async (): Promise<void> => {
-    if (selectedId === null) return;
-    await client.takeover(selectedId);
-    refetchAll();
-  }, [client, selectedId, refetchAll]);
+  // Flip the per-conversation Agent ON/OFF switch. Optimistic in the toggle;
+  // the store confirms via agent.toggled and refetchAll reconciles state.
+  const onToggleAgent = useCallback(
+    async (enabled: boolean): Promise<void> => {
+      if (selectedId === null) return;
+      await client.setAgentEnabled(selectedId, enabled);
+      refetchAll();
+    },
+    [client, selectedId, refetchAll],
+  );
 
   const onSimulate = useCallback(
     async (text: string): Promise<void> => {
@@ -270,6 +309,32 @@ export default function InboxScreen() {
     },
     [client, selectedId, refetchAll],
   );
+
+  const onRequestDocument = useCallback(
+    async (docType: string): Promise<void> => {
+      if (selectedId === null) return;
+      await client.requestDocument(selectedId, docType);
+      refetchAll();
+    },
+    [client, selectedId, refetchAll],
+  );
+
+  // Demo affordance: mint a missed call, then open its conversation so the
+  // operator watches the text-back choreography (missed-call entry → agent
+  // typing → auto-ack). The call.missed handler also auto-selects when nothing
+  // is open; selecting here guarantees the watch even from another thread.
+  const [simulatingMissedCall, setSimulatingMissedCall] = useState(false);
+  const onSimulateMissedCall = useCallback(async (): Promise<void> => {
+    if (simulatingMissedCall) return;
+    setSimulatingMissedCall(true);
+    try {
+      const { conversationId } = await client.simulateMissedCall();
+      setSearchParams({ c: conversationId });
+      refetchAll();
+    } finally {
+      setSimulatingMissedCall(false);
+    }
+  }, [client, simulatingMissedCall, setSearchParams, refetchAll]);
 
   const triageLoading = discovery.loading && discovery.data === undefined;
   const threadLoading = selectedId !== null && thread.loading && thread.data === undefined;
@@ -301,24 +366,30 @@ export default function InboxScreen() {
         loading={triageLoading}
         selectedId={selectedId}
         onSelect={onSelect}
+        onSimulateMissedCall={onSimulateMissedCall}
+        simulatingMissedCall={simulatingMissedCall}
       />
       <ThreadPane
         detail={detail}
         loading={threadLoading}
-        pendingDraft={pendingDraft}
-        playbookLabel={playbookLabelFor(pendingDraft)}
+        suggestion={suggestion}
         typing={typing}
         sendingActive={sendingActive}
         onApprove={onApprove}
-        onEdit={onEdit}
-        onTakeover={onTakeover}
+        onSend={onSend}
+        onToggleAgent={onToggleAgent}
         onOpenContext={() => setContextSheetOpen(true)}
         onOpenBrief={() => setBriefOpen(true)}
         onBack={onBack}
       />
       {/* Docked rail — the grid's third column; CSS hides it below 1100px. */}
       <div className={styles.railDocked}>
-        <ContextRail detail={detail} loading={threadLoading} onSimulate={onSimulate} />
+        <ContextRail
+          detail={detail}
+          loading={threadLoading}
+          onSimulate={onSimulate}
+          onRequestDocument={onRequestDocument}
+        />
       </div>
       {/* Context sheet — the same rail as a right slide-over below 1100px. */}
       {contextSheetOpen && (
@@ -333,6 +404,7 @@ export default function InboxScreen() {
               detail={detail}
               loading={threadLoading}
               onSimulate={onSimulate}
+              onRequestDocument={onRequestDocument}
               variant="sheet"
               onClose={() => setContextSheetOpen(false)}
             />

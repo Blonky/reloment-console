@@ -105,6 +105,24 @@ export function IconHelp({ size = 16 }: IconProps) {
   ));
 }
 
+export function IconPhone({ size = 16 }: IconProps) {
+  return svg(size, (
+    <>
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+    </>
+  ));
+}
+
+// Missed call — a phone with a small "down/away" slash marker.
+export function IconMissedCall({ size = 16 }: IconProps) {
+  return svg(size, (
+    <>
+      <path d="M20.5 17.5v2a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 .62 3.79 2 2 0 0 1 2.61 1.6h2a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L6.09 9.51a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7a2 2 0 0 1 1.72 2z" />
+      <path d="M23 1l-6 6M17 1l6 6" />
+    </>
+  ));
+}
+
 export function IconSend({ size = 16 }: IconProps) {
   return svg(size, (
     <>

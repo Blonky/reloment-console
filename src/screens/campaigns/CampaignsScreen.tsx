@@ -26,8 +26,8 @@ export default function CampaignsScreen() {
         <h1 className={styles.pageTitle}>Campaigns</h1>
         <p className={styles.pageSub}>
           {data === undefined
-            ? 'Playbook runs · exclusions shown in full'
-            : `${data.length} ${data.length === 1 ? 'playbook' : 'playbooks'} · exclusions shown in full`}
+            ? 'Playbook runs'
+            : `${data.length} ${data.length === 1 ? 'playbook' : 'playbooks'}`}
         </p>
       </header>
 
@@ -87,6 +87,10 @@ function PlaybookCard({ row }: { row: CampaignRow }) {
           ))}
         </div>
 
+        {meta.autonomyNote !== undefined && (
+          <p className={styles.autonomyNote}>{meta.autonomyNote}</p>
+        )}
+
         <div className={styles.figures}>
           <Figure label="Enrolled" value={stats.enrolled} />
           <Figure label="Excluded" value={stats.excluded} tone="excluded" />
@@ -94,12 +98,11 @@ function PlaybookCard({ row }: { row: CampaignRow }) {
           <Figure label="Replied" value={stats.replied} />
         </div>
 
-        <div className={styles.exclusions}>
-          {meta.exclusions.length === 0 ? (
-            <p className={styles.cleared}>
-              No one excluded — every enrolled contact cleared the gate.
-            </p>
-          ) : (
+        {/* Exclusions are a first-class stat — the list shows only when there ARE
+            exclusions. When zero, the EXCLUDED figure above already says it, so
+            the "no one excluded" sentence is cut as a caption of its own number. */}
+        {meta.exclusions.length > 0 && (
+          <div className={styles.exclusions}>
             <ul className={styles.exclusionList}>
               {meta.exclusions.map((ex) => (
                 <li key={ex.name} className={styles.exclusionRow}>
@@ -108,8 +111,8 @@ function PlaybookCard({ row }: { row: CampaignRow }) {
                 </li>
               ))}
             </ul>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </Card>
   );

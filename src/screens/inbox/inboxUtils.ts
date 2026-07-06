@@ -98,14 +98,19 @@ export function triageTag(args: {
   hasPendingDraft: boolean;
   routedToHuman: boolean;
   wonBack: boolean;
+  missedCall: boolean;
   lastDirection: 'inbound' | 'outbound' | null;
 }): TriageTag {
   if (args.optedOut) return { label: 'Opted out', tone: 'block' };
   if (args.hasPendingDraft) return { label: 'Awaiting approval', tone: 'hold' };
   if (args.routedToHuman) return { label: 'Routed to human', tone: 'info' };
+  if (args.missedCall) return { label: 'Missed call', tone: 'info' };
   if (args.wonBack) return { label: 'Won back', tone: 'ok' };
   return { label: 'Replied', tone: 'neutral' };
 }
+
+/** The marker body a session-minted missed-call conversation opens with. */
+export const MISSED_CALL_MARKER = 'forwarded to text-back';
 
 /** Sort weight for needs-you-first ordering (lower = higher in the list). */
 export function triageWeight(tag: TriageTag): number {
@@ -133,6 +138,7 @@ export function isSystemEvent(m: ThreadMessage): boolean {
   if (m.status === 'held') return true;
   if (m.status === 'opted_out') return true;
   if (m.status === 'opted_back_in') return true;
+  if (m.status === 'missed_call') return true;
   if (typeof m.status === 'string' && m.status.startsWith('blocked_')) return true;
   if (m.advice_verdict === 'advice_adjacent' && m.direction === 'outbound') return true;
   return false;
@@ -142,6 +148,7 @@ export function isSystemEvent(m: ThreadMessage): boolean {
 export function systemEventLabel(m: ThreadMessage): string | null {
   if (m.status === 'opted_out') return 'Opted out — will never be texted again';
   if (m.status === 'opted_back_in') return 'Opted back in — transactional messages resumed';
+  if (m.status === 'missed_call') return 'Missed call · forwarded to text-back';
   return null;
 }
 

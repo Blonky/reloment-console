@@ -229,6 +229,38 @@
   font-variant-numeric: tabular-nums;
 }
 
+.triageHeadSpacer {
+  flex: 1;
+}
+
+/* Demo chip — a quiet white ghost pill matching the rail's simulate chips. */
+.missedCallChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.missedCallChip:hover:not(:disabled) {
+  box-shadow: var(--shadow-soft);
+}
+
+.missedCallChip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .scroll {
   flex: 1;
   min-height: 0;
@@ -538,6 +570,60 @@
   color: var(--ink-2);
 }
 
+/* Media attachment chip — a small rounded card inside the bubble group (doc or
+   photo glyph + filename + size). No actual file rendering. */
+.attachmentChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.bubbleRow.outbound .attachmentChip {
+  margin-left: auto;
+}
+
+.attachmentGlyph {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.attachmentMeta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.attachmentName {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachmentSize {
+  font-size: 11px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
 /* System / timeline entries — centered hairline, not bubbles. */
 .systemEntry {
   display: flex;
@@ -663,126 +749,223 @@
   color: var(--ink);
 }
 
-/* ── DraftCard ───────────────────────────────────────────────────────────────
-   flex: none so the card never grows; the thread scroll region (flex:1,
-   min-height:0) absorbs the pressure and Approve stays above the fold. */
-.draftFoot {
+/* ── Agent ON/OFF switch (thread header) ────────────────────────────────────── */
+.agentToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+
+.agentToggleLabel {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+/* 34×20 pill track + knob. Hairline neutral off, accent on. */
+.agentTrack {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  padding: 0;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.agentTrackOn {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.agentKnob {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(28, 27, 23, 0.2);
+  transition: transform var(--dur) var(--ease);
+}
+
+.agentTrackOn .agentKnob {
+  transform: translateX(14px);
+}
+
+/* ── Composer dock (suggestion slot + composer) — the thread's bottom anchor ─── */
+.composerDock {
   flex: none;
   border-top: 1px solid var(--line);
   background: var(--surface);
-  padding: 12px 20px 14px;
+  padding: 10px 20px 14px;
 }
 
-/* One compact meta line: kicker (with playbook inline) left, review pill right. */
-.draftHead {
+/* ── Suggestion slot — one compact quiet card above the composer ─────────────── */
+.suggestion {
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  margin-bottom: 10px;
+  animation: suggestion-fade var(--dur) var(--ease);
+}
+
+@keyframes suggestion-fade {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.suggestionTop {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
-.draftKicker {
-  font-size: 12px;
+.suggestionLabel {
+  font-size: 11px;
   font-weight: 600;
-  color: var(--ink);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-2);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.draftPlaybook {
+.suggestionPlaybook {
   font-weight: 500;
-  color: var(--ink-2);
+  text-transform: none;
+  letter-spacing: 0;
 }
 
-/* The editable well styled like an outbound bubble in review. Auto-sizes 2–4
-   rows via JS (max-height cap here as a backstop), then scrolls internally. */
-.draftWell {
+.suggestionBody {
   display: block;
   width: 100%;
-  resize: none;
-  max-height: 96px;
-  overflow-y: auto;
-  padding: 9px 13px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--accent-soft);
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 6px 0 0;
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.42;
   color: var(--ink);
-  font-size: 15px;
-  line-height: 1.45;
-  transition: border-color var(--dur) var(--ease);
-}
-
-.draftWell:read-only {
   cursor: default;
 }
 
-.draftWell.editing {
-  background: var(--surface);
-  border-color: var(--accent);
+.suggestionClamp {
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-/* Chips left, actions right — one row that wraps gracefully at narrow widths. */
-.draftControls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  margin-top: 10px;
+.suggestionRationale {
+  margin: 5px 0 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ink-2);
 }
 
-.draftChips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.draftActions {
+.suggestionActions {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 10px;
   flex-wrap: wrap;
 }
 
-/* The honest approve-result region. */
-.resultRegion {
-  margin-top: 10px;
-}
-
-.resultRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  font-size: 13px;
-  color: var(--ink);
-}
-
-.resultOk {
-  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
-  background: var(--ok-soft);
-  color: var(--ok);
-}
-
-.resultOkText {
-  color: var(--ink);
-}
-
-.resultDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
+/* ── Composer — iMessage-family pill field with a circular accent send button ── */
+.composer {
   flex: none;
-  background: var(--ok);
+}
+
+.composerField {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 5px 5px 5px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 22px;
+  background: var(--surface);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.composerField:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.composerInput {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: none;
+  outline: none;
+  background: none;
+  padding: 6px 0;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--ink);
+  max-height: 96px;
+  overflow-y: auto;
+}
+
+.composerInput::placeholder {
+  color: var(--ink-2);
+}
+
+.composerSend {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+
+.composerSend:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.composerSend:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.composerSpinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  animation: composer-spin 0.7s linear infinite;
+}
+
+@keyframes composer-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Context rail ───────────────────────────────────────────────────────────── */
@@ -795,12 +978,6 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
-}
-
-.railSection {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 /* Tighter section — a smaller label + a single tight row of content. */
@@ -827,29 +1004,7 @@
   color: var(--ink-2);
 }
 
-.railContactHead {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.railContactId {
-  min-width: 0;
-}
-
-.railContactName {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-
-.railContactSub {
-  font-size: 12px;
-  color: var(--ink-2);
-}
-
-/* ONE compact fact line: policy · renewal · local time. */
+/* One compact fact line: LOB · policy · renewal (the header shows name + time). */
 .factLine {
   font-size: 12px;
   line-height: 1.5;
@@ -1037,18 +1192,9 @@
     max-width: 100vw;
   }
 
-  /* DraftCard actions stack full-width; each button fills its row. */
-  .draftControls {
-    align-items: stretch;
-  }
-
-  .draftActions {
-    width: 100%;
-    flex-wrap: nowrap;
-  }
-
-  .draftActions > * {
-    flex: 1;
+  /* Composer dock keeps a comfortable phone gutter. */
+  .composerDock {
+    padding: 10px 12px 12px;
   }
 
   /* Triage rows keep a comfortable tap target. */

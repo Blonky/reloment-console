@@ -278,6 +278,60 @@ store, so `thread()` / `queue()` reads stay the single source of truth.
   and answers **only** from the thread's real messages, consent, and gate
   decisions — never invented facts.
 
+#### Messages-first thread (v4)
+
+The thread stops being an approval cockpit and becomes a **messages-first
+surface**. We are on the **agency's side** of the conversation: a normal
+composer you type into and send as the business, immediately. The agent's
+next-best move rides **above** the composer as a suggestion, and a
+per-conversation **Agent ON/OFF** toggle decides whether the agent acts on its
+own. Takeover-as-a-separate-state is gone — it collapses into the toggle.
+
+- **Composer (always available).** You just type and send; the message goes out
+  as the business right away. The **only lock is opted-out** — nothing else
+  disables the composer. Every send still runs the **send gate** on every
+  keystroke-free submit (kill switch → opt-out → consent → quiet hours), exactly
+  like `approve()`; a block surfaces the GateReason honestly. `sendManual` has
+  **no** human-controller requirement anymore. A human send **clears any held
+  draft** on that conversation (the human answered instead — the stale draft is
+  removed so no orphan "Held" state lingers).
+- **Suggestion slot** (`suggestion(conversationId) → Suggestion | null`). The
+  agent's next-best message, shown above the composer and **regenerated after
+  every turn**. Two shapes and one silence:
+  - **Held** (`held: true`, `draftId`): a gate-held playbook draft awaiting
+    approval — `approve(draftId)` sends it. Carries the playbook label and a
+    data-drawn rationale.
+  - **Assistive** (`held: false`): a purely helpful draft the human may send,
+    edit, or ignore. It changes nothing until you act.
+  - **null = silence is the best action.** Returned honestly when a nudge would
+    be pushy: the contact is opted out, just declined, just got a closing
+    message (won-back — leave them alone), or our last outbound is unanswered
+    and still fresh (< 1h). At least one fixture (**Jordan**, a just-confirmed
+    win-back) resolves to null by design.
+  - **Rationale requirement.** `rationale` (1–3 short reasons) **must cite the
+    real data used** — renewal proximity, memory atoms (teenage driver, prefers
+    texts after 6pm, sore about the rate increase), LOB gap, policy status.
+    Never invented. The body sounds like the Hartley drafts: short, human, one
+    question max, names Tom where natural.
+- **Agent toggle** (`setAgentEnabled(conversationId, enabled)`; `FeedEvent`
+  `agent.toggled`). A day/night switch per conversation. **A human message never
+  disables the agent** — it's just another outbound the agent knows about and
+  treats as if it had sent it (its context includes human turns as its own).
+  Only the toggle changes agent state. `agent_enabled` is the source of truth;
+  `controller` ('agent' | 'human') is kept mirrored for back-compat. `takeover()`
+  is now a thin alias for `setAgentEnabled(false)`.
+- **Regeneration** (`FeedEvent` `suggestion.updated`). Fires after **any**
+  message lands on a conversation — inbound (`message.received`), an agent draft
+  created, `message.sent` (approve / auto-ack), a manual send, opt-out/opt-in
+  changes, and the agent toggle. The UI refetches `suggestion()` on it. A newly
+  created held draft **replaces** any prior suggestion.
+- **Autonomy matrix.** Auto-ack for the **missed-call inquiry basis** (a bounded
+  acknowledgement auto-sends within the ceiling, still gated). Approval-held for
+  **playbook sends** (the agent proposes; the human approves). **Assistive-only**
+  when the toggle is OFF — no agent typing or drafts on inbound, but
+  `suggestion.updated` still fires so the human always has a fresh
+  `held: false` suggestion to lean on.
+
 ### Home (`/`) — the command surface (Sauna-pattern, v2)
 
 A CENTERED command surface, not a dashboard grid. One scrollable centered
@@ -383,7 +437,60 @@ Inbox context sheet converge on it.
   (read-only, "never texted again"), audit trail sample (hash-chained rows:
   time, action, reason), data & compliance blurb.
 
-## 7. Engineering standards
+## 7. Operations features (round 7)
+
+Producer-facing operations layered onto the governed runtime. Every send path —
+automated or human — runs the same deterministic send gate; fail-closed is the
+product. New `DataClient` methods (DemoClient chorographs them in-memory;
+HttpClient maps provider-style endpoints and degrades gracefully):
+
+- **Missed-call text-back** — `simulateMissedCall(): Promise<{ conversationId }>`.
+  The line is messaging-only (no voice), so a missed call arrives via Reloment's
+  voice-capture forward, which emits a `call.missed` FeedEvent
+  (`{ conversationId, callerName, e164 }`). Choreography: at **t=0** the event
+  mints the conversation with a system entry (status `missed_call`, "Missed call
+  · forwarded to text-back") and records consent on **inquiry basis**
+  (`inbound_call`) at call time — so `listConversations()` includes it
+  immediately; at **~1200ms** the agent types; at **~2600ms** the acknowledgement
+  **auto-sends** (status `sent`) — "Sorry we missed your call — this is Hartley
+  Insurance's text line. How can we help?". It auto-sends (no approval) because
+  the missed-call playbook's autonomy ceiling permits an inquiry-basis
+  acknowledgement — **but it still passes the gate**: if the caller is on the
+  opt-out list, no text is sent.
+- **Manual follow-up** — `sendManual(conversationId, body): Promise<{ ok; blockedReason? }>`.
+  For human-controlled threads. Runs the **same gate semantics**: blocked returns
+  `{ ok:false, blockedReason:'opted_out' }` (fail-closed); a clear gate appends
+  an outbound `sent` message and emits `message.sent`. Manual sends are gated too.
+- **Call list** — `callList(): Promise<CallListRow[]>`. A deterministic producer
+  worklist ranked over the book by renewal proximity, engagement (a recent
+  inbound), policy status (lapsed = reactivation), and LOB gap (auto-only =
+  bundle candidate), with plain-English `reasons`. Contacts with `consentState`
+  `opted_out` or `none` **still appear**, but their `suggestedAction` is always
+  **"Call"**, never **"Text"** — texting an unconsented lead is exactly what the
+  gate refuses; a phone call is fine. 5–7 rows.
+- **Documents** — `requestDocument(conversationId, docType): Promise<void>`. A
+  gated outbound ("Could you text us a photo of your {docType}? A picture is
+  fine.") — **silently a no-op if opted out** — then at **~2800ms** the customer
+  replies with an inbound carrying a **media part**
+  (`{ type:'media', filename, mime_type, size_bytes }`, mirroring the provider's
+  media parts on `ThreadMessage.parts`). Offered doc types: declarations page,
+  driver's license, photos of damage.
+- **Voice/tone profile** — `toneProfile(): Promise<ToneProfile>`. How the agents
+  were tuned to the agency's voice: `trainedOn`, `traits`, and a generic-vs-tuned
+  renewal-text `example`.
+- **Booking** — `bookingConnection(): Promise<{ provider; status; calendar }>`.
+  The scheduling connection drafts already propose times against (Calendly, "Tom
+  Hartley — Renewal reviews").
+- **Playbooks** — two new fixtures alongside win-back: **`missed_call`**
+  (trigger `call.missed`, autonomy `auto_send_ack`, inquiry-basis acknowledgement)
+  and **`bundle_upsell`** (auto→auto+home cross-sell, draft-for-approval). Win-back
+  reactivates dead leads whose consent is still valid.
+
+**Compliance stances (the point):** missed-call text = inquiry consent basis,
+still gated; manual sends gated; the call list never suggests texting an
+unconsented lead (only calling); documents flow in as provider media parts.
+
+## 8. Engineering standards
 
 - Vite + React 19 + TypeScript strict. Dependencies: `react`, `react-dom`,
   `react-router-dom`, `@fontsource-variable/inter`. **Nothing else** — no UI

@@ -17,8 +17,10 @@ import type {
   ApproveResult,
   AuditRow,
   BookRow,
+  CallListRow,
   CampaignRow,
   Channel,
+  ConnectionRow,
   Contact,
   ConversationBrief,
   EnrollResult,
@@ -27,15 +29,19 @@ import type {
   HomePulse,
   InboundResult,
   LineAgent,
+  MediaPart,
   OutcomeRow,
   QueueItem,
   SearchHit,
+  Suggestion,
   ThreadBrief,
   ThreadDetail,
   ThreadMessage,
+  ToneProfile,
 } from './types.ts';
 import {
   AUDIT_SAMPLE,
+  BOOKING_CONNECTION,
   CONTACTS,
   DEMO_NOW,
   HOME_PULSE,
@@ -43,6 +49,7 @@ import {
   OUTCOMES,
   PLAYBOOKS,
   THREADS,
+  TONE_PROFILE,
   auditTime,
   contactById,
   contactByName,
@@ -51,6 +58,7 @@ import {
   playbookByKey,
   threadByContactId,
   threadByConversationId,
+  type FixtureContact,
   type FixtureMessage,
   type FixtureThread,
 } from './fixtures.ts';
@@ -82,6 +90,16 @@ const CUSTOMER_TYPING_MS = 700; // typing 'stopped' + message.received fire here
 const AGENT_TYPING_START_MS = 900; // agent typing 'typing'
 const AGENT_TYPING_STOP_MS = 1400; // agent typing 'stopped' + draft.created
 
+// Missed-call text-back choreography (simulateMissedCall). call.missed fires at
+// t=0 with the conversation already on the store; the agent then types and the
+// acknowledgement auto-sends (no approval — inquiry basis within the ceiling).
+const MISSED_CALL_AGENT_TYPING_MS = 1200; // agent typing 'typing'
+const MISSED_CALL_AUTOSEND_MS = 2600; // agent typing 'stopped' + message.sent
+
+// Document request choreography (requestDocument). The ask sends immediately;
+// the customer then replies with a media part after a beat.
+const DOC_REPLY_TYPING_MS = 2800; // customer typing → message.received (with media)
+
 // Deep-ish clone of a fixture thread so mutations don't leak into the fixtures.
 function cloneThread(t: FixtureThread): FixtureThread {
   return {
@@ -97,6 +115,22 @@ function cloneThread(t: FixtureThread): FixtureThread {
 function pickChannel(contactId: string): Exclude<Channel, null> {
   const c = contactById(contactId);
   return c?.imessageCapable ? 'imessage' : 'sms';
+}
+
+// A realistic media part per document type — the shape mirrors the provider's
+// inbound media part ({ type:'media', filename, mime_type, size_bytes }).
+function mediaPartFor(docType: string): MediaPart {
+  const d = docType.toLowerCase();
+  if (d.includes('declaration')) {
+    return { type: 'media', filename: 'declarations.pdf', mime_type: 'application/pdf', size_bytes: 284_612 };
+  }
+  if (d.includes('license') || d.includes('licence')) {
+    return { type: 'media', filename: 'IMG_2214.heic', mime_type: 'image/heic', size_bytes: 1_842_004 };
+  }
+  if (d.includes('damage') || d.includes('photo')) {
+    return { type: 'media', filename: 'IMG_2231.heic', mime_type: 'image/heic', size_bytes: 2_305_889 };
+  }
+  return { type: 'media', filename: 'IMG_2214.heic', mime_type: 'image/heic', size_bytes: 1_842_004 };
 }
 
 interface Enrollment {
@@ -138,8 +172,12 @@ export class DemoClient implements DataClient {
   private consents = new Map<string, Set<string>>(
     CONTACTS.map((c) => [c.id, new Set(c.consents)]),
   );
-  // Conversations a takeover handed to a human (agent stands down — no drafts).
-  private humanControlled = new Set<string>();
+  // Messages-first thread (v4): the per-conversation Agent ON/OFF switch, seeded
+  // from the fixtures' controller (all fixture threads are agent-controlled →
+  // enabled). Absent from the map means "not yet toggled" — default enabled.
+  // OFF stands the agent down (no typing/drafts on inbound) but the composer and
+  // an assistive suggestion stay available.
+  private agentEnabled = new Map<string, boolean>();
   private threads: Map<string, FixtureThread> = new Map(
     THREADS.map((t) => [t.conversationId, cloneThread(t)]),
   );
@@ -181,6 +219,7 @@ export class DemoClient implements DataClient {
       channel_accepted: m.channel_accepted,
       advice_verdict: m.advice_verdict,
       created_at: m.created_at,
+      ...(m.parts ? { parts: m.parts } : {}),
     };
   }
 
@@ -257,6 +296,7 @@ export class DemoClient implements DataClient {
     return delay({
       conversation: {
         id: t.conversationId,
+        agent_enabled: this.isAgentEnabled(t.conversationId),
         controller: this.controllerFor(t.conversationId),
         contact_id: c.id,
         display_name: c.name,
@@ -293,6 +333,8 @@ export class DemoClient implements DataClient {
     this.appendAudit('owner', 'message.sent', `channel:${channel}`);
     // Notify any open thread live (the store already reflects the send above).
     this.emit({ type: 'message.sent', conversationId, message: this.toThreadMessage(draft) });
+    // A message landed → the next-best suggestion regenerates.
+    this.emit({ type: 'suggestion.updated', conversationId });
     return delay({ sent: true, deliveredAs: channel, decision });
   }
 
@@ -320,17 +362,30 @@ export class DemoClient implements DataClient {
     await delay(undefined);
   }
 
-  async takeover(conversationId: string): Promise<void> {
+  // The Agent ON/OFF switch (v4). Turning OFF stands the agent down — no more
+  // typing/drafts on inbound — and withdraws any pending held draft from the
+  // queue (it was the agent's proposal; the human is taking the wheel). Turning
+  // ON re-arms it. Either way controller stays mirrored and suggestion.updated
+  // fires so the composer's suggestion slot refreshes (assistive when OFF).
+  async setAgentEnabled(conversationId: string, enabled: boolean): Promise<void> {
     const t = this.threads.get(conversationId);
     if (!t) throw new Error('not found');
-    // Standing the agent down: the thread is human-controlled (no more agent
-    // drafts on inbound), and any pending draft is withdrawn from the queue.
-    this.humanControlled.add(conversationId);
-    for (const m of t.messages) {
-      if (m.status === 'awaiting_approval') m.status = 'held';
+    this.agentEnabled.set(conversationId, enabled);
+    if (!enabled) {
+      for (const m of t.messages) {
+        if (m.status === 'awaiting_approval') m.status = 'held';
+      }
     }
-    this.appendAudit('owner', 'takeover', conversationId);
+    this.appendAudit('owner', 'agent_toggled', enabled ? 'on' : 'off');
+    this.emit({ type: 'agent.toggled', conversationId, enabled });
+    this.emit({ type: 'suggestion.updated', conversationId });
     await delay(undefined);
+  }
+
+  // takeover() is now a thin alias for turning the agent OFF, kept so any
+  // not-yet-updated caller keeps compiling and behaving (agent stands down).
+  async takeover(conversationId: string): Promise<void> {
+    await this.setAgentEnabled(conversationId, false);
   }
 
   // Live choreography: the method resolves quickly with an ack; timers emit the
@@ -356,6 +411,10 @@ export class DemoClient implements DataClient {
 
       const inbound = this.appendInbound(t, text);
       this.emit({ type: 'message.received', conversationId, message: this.toThreadMessage(inbound) });
+      // An inbound landed → the next-best suggestion regenerates for EVERY case
+      // below (STOP/START consent flip, agent-ON draft path, agent-OFF assistive
+      // path). Agent-ON additionally re-fires after the held draft is created.
+      this.emit({ type: 'suggestion.updated', conversationId });
 
       if (isStop) {
         // Only the FIRST opt-out records a system entry + consent event; a
@@ -397,9 +456,12 @@ export class DemoClient implements DataClient {
         return;
       }
 
-      // Normal message: only an agent-controlled, not-opted-out thread drafts a
-      // reply (agent typing ~900ms in, then typing stopped + draft.created).
-      if (!this.optedOut.has(t.contactId) && this.controllerFor(conversationId) === 'agent') {
+      // Normal message. Agent ON + not-opted-out → the existing typing→held-draft
+      // flow (agent typing ~900ms in, then typing stopped + draft.created). Agent
+      // OFF → NO agent typing/draft, but the suggestion already regenerated above
+      // so the human sees a fresh assistive suggestion (held: false). Opted out →
+      // silent (the suggestion() will resolve to null).
+      if (!this.optedOut.has(t.contactId) && this.isAgentEnabled(conversationId)) {
         setTimeout(() => {
           this.emit({ type: 'typing', conversationId, who: 'agent', state: 'typing' });
         }, AGENT_TYPING_START_MS - CUSTOMER_TYPING_MS);
@@ -408,6 +470,8 @@ export class DemoClient implements DataClient {
           this.emit({ type: 'typing', conversationId, who: 'agent', state: 'stopped' });
           const draft = this.appendHeldDraft(t, text);
           this.emit({ type: 'draft.created', conversationId, message: this.toThreadMessage(draft) });
+          // The held draft IS the new suggestion now — refresh the slot.
+          this.emit({ type: 'suggestion.updated', conversationId });
         }, AGENT_TYPING_STOP_MS - CUSTOMER_TYPING_MS);
       }
     }, CUSTOMER_TYPING_MS);
@@ -486,10 +550,196 @@ export class DemoClient implements DataClient {
     scopes.delete('marketing');
   }
 
-  // The controller for a conversation. Fixtures are agent-controlled until a
-  // takeover flips them to human (tracked in humanControlled).
+  // Whether the agent is ON for a conversation. Default enabled (fixtures are
+  // agent-controlled) until setAgentEnabled flips it. This is the source of
+  // truth; controllerFor() is the legacy mirror.
+  private isAgentEnabled(conversationId: string): boolean {
+    return this.agentEnabled.get(conversationId) ?? true;
+  }
+
+  // The controller for a conversation — a legacy mirror of agent_enabled kept
+  // populated so not-yet-updated UI ('agent' | 'human') keeps compiling.
   private controllerFor(conversationId: string): 'agent' | 'human' {
-    return this.humanControlled.has(conversationId) ? 'human' : 'agent';
+    return this.isAgentEnabled(conversationId) ? 'agent' : 'human';
+  }
+
+  // ── Operations: missed-call text-back, manual follow-up, documents ──────────
+
+  // A missed call on the messaging-only line, forwarded to text-back. Ray is a
+  // NEW caller with no prior conversation: the call.missed event mints the
+  // conversation (with a system entry) at t=0, records consent on inquiry basis
+  // (inbound_call) at call time, then — if the caller is not opted out — the
+  // agent types (~1200ms) and the acknowledgement AUTO-SENDS (~2600ms). It's an
+  // auto-send (no approval) because the playbook's ceiling allows an inquiry-
+  // basis acknowledgement — but it still passes the gate, recorded honestly.
+  simulateMissedCall(): Promise<{ conversationId: string }> {
+    const contactId = 'ct_ray';
+    const c = contactById(contactId)!;
+    const conversationId = `cv_${contactId}`;
+
+    // Record inbound-call consent at call time (inquiry basis). We do NOT grant
+    // marketing — a call is transactional inquiry consent only. Idempotent.
+    this.consentScopes(contactId).add('transactional');
+
+    // Mint (or reuse) the conversation with a system 'missed_call' entry.
+    let t = this.threads.get(conversationId);
+    if (!t) {
+      t = { conversationId, contactId, messages: [] };
+      this.threads.set(conversationId, t);
+    }
+    const systemEntry: FixtureMessage = {
+      id: `msg_sys_missed_${t.messages.length + 1}_${conversationId}`,
+      direction: 'outbound',
+      body: 'Missed call · forwarded to text-back',
+      status: 'missed_call',
+      channel_accepted: null,
+      advice_verdict: 'none',
+      classification: 'transactional',
+      created_at: this.stamp(),
+    };
+    t.messages.push(systemEntry);
+    this.appendAudit('voice_capture', 'call.missed', `${c.name} ${c.e164}`);
+    this.appendAudit('system', 'consent_recorded', 'inbound_call');
+
+    // t=0: the missed-call event (conversation is already on the store, so
+    // listConversations()/queue()/thread() reads see it immediately).
+    this.emit({ type: 'call.missed', conversationId, callerName: c.name, e164: c.e164 });
+
+    // If the caller opted out, the playbook stays silent — no text-back.
+    if (!this.optedOut.has(contactId)) {
+      setTimeout(() => {
+        this.emit({ type: 'typing', conversationId, who: 'agent', state: 'typing' });
+      }, MISSED_CALL_AGENT_TYPING_MS);
+
+      setTimeout(() => {
+        this.emit({ type: 'typing', conversationId, who: 'agent', state: 'stopped' });
+        // The gate still runs (fail-closed): auto-send only on ALLOW.
+        const decision = this.gate(contactId, 'transactional');
+        this.appendAudit('send_gate', 'send_gate', decision.auditReason);
+        if (decision.decision !== 'ALLOW') return;
+        const channel = pickChannel(contactId);
+        const sent = this.appendSent(
+          t!,
+          "Sorry we missed your call — this is Hartley Insurance's text line. How can we help?",
+          channel,
+        );
+        this.appendAudit('missed_call_agent', 'message.sent', `auto_ack channel:${channel}`);
+        this.emit({ type: 'message.sent', conversationId, message: this.toThreadMessage(sent) });
+        this.emit({ type: 'suggestion.updated', conversationId });
+      }, MISSED_CALL_AUTOSEND_MS);
+    }
+
+    return delay({ conversationId });
+  }
+
+  // Messages-first send (v4): a normal composer send from the business's side.
+  // Allowed whenever the send gate clears — NO human-controller requirement (a
+  // human message is just another outbound; it does NOT change agent_enabled).
+  // Same fail-closed gate as every other send path (kill switch / opt-out /
+  // consent). After a clear send: any held draft on this conversation is CLEARED
+  // (the human answered instead — the draft is stale), then message.sent and
+  // suggestion.updated fire so an open thread and the suggestion slot refresh.
+  sendManual(
+    conversationId: string,
+    body: string,
+  ): Promise<{ ok: boolean; blockedReason?: string }> {
+    const t = this.threads.get(conversationId);
+    if (!t) return Promise.reject(new Error('not found'));
+
+    const decision = this.gate(t.contactId, 'transactional');
+    this.appendAudit('send_gate', 'send_gate', decision.auditReason);
+    if (decision.decision !== 'ALLOW') {
+      return delay({ ok: false, blockedReason: decision.auditReason });
+    }
+    const channel = pickChannel(t.contactId);
+    const sent = this.appendSent(t, body, channel);
+    // The human answered — drop any orphan held draft so no stale "Held" remains.
+    this.clearHeldDrafts(t);
+    this.appendAudit('owner', 'message.sent', `manual channel:${channel}`);
+    this.emit({ type: 'message.sent', conversationId, message: this.toThreadMessage(sent) });
+    this.emit({ type: 'suggestion.updated', conversationId });
+    return delay({ ok: true });
+  }
+
+  // Remove any awaiting-approval drafts from the store (used after a manual send
+  // supersedes them). Deletes rather than re-statuses so no orphan bubble lingers.
+  private clearHeldDrafts(t: FixtureThread): void {
+    t.messages = t.messages.filter((m) => m.status !== 'awaiting_approval');
+  }
+
+  // Ask the customer for a document photo, then simulate them replying with a
+  // media part. The ask is a gated outbound (blocked SILENTLY if opted out — a
+  // no-op rather than an error). On a clear gate the customer replies ~2800ms
+  // later with an inbound carrying a MediaPart shaped like the provider's.
+  requestDocument(conversationId: string, docType: string): Promise<void> {
+    const t = this.threads.get(conversationId);
+    if (!t) return Promise.reject(new Error('not found'));
+
+    const decision = this.gate(t.contactId, 'transactional');
+    this.appendAudit('send_gate', 'send_gate', decision.auditReason);
+    if (decision.decision !== 'ALLOW') {
+      // Blocked silently — no outbound, no reply simulated.
+      return delay(undefined);
+    }
+    const channel = pickChannel(t.contactId);
+    const ask = this.appendSent(
+      t,
+      `Could you text us a photo of your ${docType}? A picture is fine.`,
+      channel,
+    );
+    this.appendAudit('owner', 'message.sent', `doc_request:${docType}`);
+    this.emit({ type: 'message.sent', conversationId, message: this.toThreadMessage(ask) });
+    this.emit({ type: 'suggestion.updated', conversationId });
+
+    // The customer replies with a media attachment after a beat.
+    setTimeout(() => {
+      this.emit({ type: 'typing', conversationId, who: 'customer', state: 'typing' });
+    }, DOC_REPLY_TYPING_MS - 500);
+
+    setTimeout(() => {
+      this.emit({ type: 'typing', conversationId, who: 'customer', state: 'stopped' });
+      const part = mediaPartFor(docType);
+      const reply = this.appendInboundMedia(t, 'Here you go 👍', part);
+      this.appendAudit('system', 'message.received', `media:${part.filename}`);
+      this.emit({ type: 'message.received', conversationId, message: this.toThreadMessage(reply) });
+      this.emit({ type: 'suggestion.updated', conversationId });
+    }, DOC_REPLY_TYPING_MS);
+
+    return delay(undefined);
+  }
+
+  // Append a delivered outbound (status 'sent', channel set). Used by the auto
+  // text-back, manual sends, and document requests.
+  private appendSent(t: FixtureThread, body: string, channel: Exclude<Channel, null>): FixtureMessage {
+    const m: FixtureMessage = {
+      id: `msg_out_${t.messages.length + 1}_${t.conversationId}`,
+      direction: 'outbound',
+      body,
+      status: 'sent',
+      channel_accepted: channel,
+      advice_verdict: 'none',
+      classification: 'transactional',
+      created_at: this.stamp(),
+    };
+    t.messages.push(m);
+    return m;
+  }
+
+  // Append an inbound bubble carrying a media part (customer document reply).
+  private appendInboundMedia(t: FixtureThread, text: string, part: MediaPart): FixtureMessage {
+    const m: FixtureMessage = {
+      id: `msg_in_media_${t.messages.length + 1}_${t.conversationId}`,
+      direction: 'inbound',
+      body: text,
+      status: 'received',
+      channel_accepted: null,
+      advice_verdict: 'none',
+      classification: 'transactional',
+      created_at: this.stamp(),
+      parts: [part],
+    };
+    t.messages.push(m);
+    return m;
   }
 
   // ── Command tools ─────────────────────────────────────────────────────────
@@ -549,6 +799,8 @@ export class DemoClient implements DataClient {
       const conv = threadByContactId(contactId);
       const body = pb.template.replaceAll('{first_name}', c.name.split(' ')[0]);
       const target = conv && this.threads.get(conv.conversationId);
+      // A held draft landed on this conversation → its suggestion regenerates.
+      const draftConversationId = conv?.conversationId ?? `cv_${contactId}`;
       if (target) {
         target.messages.push({
           id: `msg_pb_${pb.key}_${contactId}`,
@@ -580,6 +832,7 @@ export class DemoClient implements DataClient {
           ],
         });
       }
+      this.emit({ type: 'suggestion.updated', conversationId: draftConversationId });
     }
     this.appendAudit('command_agent', 'playbook_enrolled', `${pb.key}:${enrolled.length}`);
     return delay({ playbook: pb.name, enrolled, excluded });
@@ -607,7 +860,13 @@ export class DemoClient implements DataClient {
   threadBrief(contactId: string): Promise<ThreadBrief> {
     const c = contactById(contactId);
     if (!c) return Promise.reject(new Error('not found'));
-    const conv = threadByContactId(contactId);
+    // The session store is the source of truth — a session-minted conversation
+    // (e.g. Ray's missed-call → cv_ct_ray) has no fixture thread, so preferring
+    // the live store here makes it a first-class triage row. Fall back to the
+    // fixture thread only when nothing has landed on the store for this contact.
+    const conv =
+      [...this.threads.values()].find((t) => t.contactId === contactId) ??
+      threadByContactId(contactId);
     const recent = (conv?.messages ?? [])
       .slice()
       .reverse()
@@ -735,6 +994,135 @@ export class DemoClient implements DataClient {
         memory: c.memory.map((m) => ({ value: m.value, source: m.source })),
       })),
     );
+  }
+
+  // ── Call list — deterministic producer worklist ─────────────────────────────
+  // Ranks the book by renewal proximity, engagement (a recent inbound), policy
+  // status (lapsed = reactivation), and LOB gap (auto-only = bundle candidate).
+  // Contacts with no valid consent still appear — but their suggested action is
+  // "Call", never "Text": texting an unconsented lead is what the gate refuses;
+  // a phone call is fine.
+  callList(): Promise<CallListRow[]> {
+    const rows = CONTACTS.map((c) => {
+      const reasons: string[] = [];
+      let score = 0;
+
+      // Renewal proximity — nearest renewals rank first.
+      if (c.xDateDays !== null && c.xDateDays >= 0 && c.xDateDays <= 45) {
+        score += (46 - c.xDateDays) * 2;
+        reasons.push(`Renews in ${c.xDateDays} day${c.xDateDays === 1 ? '' : 's'}`);
+      }
+      // Engagement — a recent inbound in their thread.
+      const t = threadByContactId(c.id);
+      const lastInbound = t
+        ? [...t.messages].reverse().find((m) => m.direction === 'inbound')
+        : undefined;
+      if (lastInbound) {
+        score += 10;
+        reasons.push('Replied recently — still warm');
+      }
+      // Policy status — lapsed quotes are reactivation candidates.
+      if (c.status === 'lapsed_quote') {
+        score += 8;
+        reasons.push('Quote lapsed — reactivation candidate');
+      }
+      if (c.status === 'new_lead') {
+        score += 6;
+        reasons.push(
+          lastInbound || t ? 'New lead — asked about a quote' : 'Called yesterday, no policy on file',
+        );
+      }
+      // LOB gap — auto only, no home = bundle-upsell candidate.
+      if (c.lob === 'Auto') {
+        score += 5;
+        reasons.push('Auto only — bundle candidate');
+      }
+
+      const consentState: CallListRow['consentState'] = c.optedOut
+        ? 'opted_out'
+        : this.consentScopes(c.id).size === 0
+          ? 'none'
+          : 'ok';
+      // The gate refuses texting an unconsented/opted-out lead — suggest a call.
+      const suggestedAction = consentState === 'ok' ? 'Text' : 'Call';
+
+      return {
+        contactId: c.id,
+        name: c.name,
+        lob: c.lob,
+        score,
+        reasons,
+        consentState,
+        suggestedAction,
+      };
+    })
+      // Keep only contacts with a real reason to reach out; rank and cap 5–7.
+      .filter((r) => r.reasons.length > 0)
+      .sort((a, b) => (b.score - a.score) || a.name.localeCompare(b.name))
+      .slice(0, 7);
+
+    return delay(rows);
+  }
+
+  // ── Voice/tone profile & booking connection (read-only fixtures) ────────────
+  toneProfile(): Promise<ToneProfile> {
+    return delay({
+      trainedOn: TONE_PROFILE.trainedOn,
+      traits: [...TONE_PROFILE.traits],
+      example: { generic: TONE_PROFILE.example.generic, tuned: TONE_PROFILE.example.tuned },
+    });
+  }
+
+  bookingConnection(): Promise<{ provider: string; status: 'connected'; calendar: string }> {
+    return delay({
+      provider: BOOKING_CONNECTION.provider,
+      status: 'connected',
+      calendar: BOOKING_CONNECTION.calendar,
+    });
+  }
+
+  // The Connections surface (Trust & Settings): the five wires the agency
+  // connects, composed from existing fixtures (booking + tone) so the whole
+  // grid reads in one call. The detail on each row is what the business gave us.
+  connections(): Promise<ConnectionRow[]> {
+    return delay([
+      {
+        key: 'messaging',
+        name: 'Messaging line',
+        status: 'connected',
+        powers: 'The number every text sends and receives on.',
+        detail: '+1 (512) 555-0140 · texts send as Hartley Insurance',
+      },
+      {
+        key: 'call_capture',
+        name: 'Call capture',
+        status: 'connected',
+        powers: 'Missed calls become gated text-backs.',
+        detail:
+          'No-answer/busy forward from your business line · +1 (512) 555-0148',
+      },
+      {
+        key: 'booking',
+        name: 'Booking',
+        status: 'connected',
+        powers: 'The agent proposes real open slots.',
+        detail: `${BOOKING_CONNECTION.provider} · ${BOOKING_CONNECTION.calendar}`,
+      },
+      {
+        key: 'ams',
+        name: 'Book of record (AMS)',
+        status: 'connected',
+        powers: 'Powers renewal rationale and the call list.',
+        detail: 'Policy, renewal and LOB data · synced hourly',
+      },
+      {
+        key: 'voice',
+        name: 'Voice training',
+        status: 'connected',
+        powers: "The agent writes in your best producers' voice.",
+        detail: `Trained on ${TONE_PROFILE.trainedOn}`,
+      },
+    ]);
   }
 
   // ── Conversation brief / ask-the-thread ─────────────────────────────────────
@@ -875,6 +1263,168 @@ export class DemoClient implements DataClient {
       answer:
         'In this demo I can answer about this conversation’s messages, consent state, and gate decisions.',
     });
+  }
+
+  // ── Messages-first suggestion engine (v4) ───────────────────────────────────
+  // The agent's next-best message for the composer's suggestion slot. Computed
+  // DETERMINISTICALLY from real thread + fixture state — never invented facts,
+  // no Math.random. Three tiers:
+  //   (a) opted out → null (the gate would refuse every outbound anyway).
+  //   (b) a held draft exists → THAT draft is the suggestion (held: true), with
+  //       its playbook label and rationale drawn from the contact's data.
+  //   (c) otherwise compute the next-best message from last-inbound keywords,
+  //       renewal proximity, LOB gap, memory atoms, and policy_status — or
+  //       return null when the honest move is silence (a nudge would be pushy:
+  //       the customer just closed/said no, or the last outbound is unanswered
+  //       and fresh). "Silence is sometimes the best action."
+  async suggestion(conversationId: string): Promise<Suggestion | null> {
+    const t = this.threads.get(conversationId);
+    if (!t) return delay(null);
+    const c = contactById(t.contactId);
+    if (!c) return delay(null);
+
+    // (a) Opted out → the gate blocks every outbound; suggesting one is dishonest.
+    if (this.optedOut.has(t.contactId)) return delay(null);
+
+    const first = c.name.split(' ')[0];
+    const memValues = c.memory.map((m) => m.value.toLowerCase());
+    const hasMem = (needle: string): boolean => memValues.some((v) => v.includes(needle));
+
+    // (b) A held draft awaiting approval IS the suggestion. Rationale is built
+    // from the contact's real data (renewal proximity, memory atoms), not prose.
+    const heldDraft = [...t.messages].reverse().find((m) => m.status === 'awaiting_approval');
+    if (heldDraft) {
+      return delay({
+        body: heldDraft.body,
+        playbookLabel: this.playbookLabelFor(heldDraft),
+        held: true,
+        draftId: heldDraft.id,
+        rationale: this.rationaleFor(c, hasMem),
+      });
+    }
+
+    // (c) Compute the next-best assistive message from real thread + fixture data.
+    const lastInbound = [...t.messages].reverse().find((m) => m.direction === 'inbound');
+    const lastMessage = t.messages[t.messages.length - 1];
+    const lastOutbound = [...t.messages].reverse().find((m) => m.direction === 'outbound');
+    const inboundText = (lastInbound?.body ?? '').toLowerCase();
+
+    // Silence rule 1 — a won-back / closed thread whose last message is a
+    // closing outbound and where the customer isn't waiting on us. Nudging a
+    // just-confirmed customer is pushy; the best action is to leave them alone.
+    const closingWords = ['confirmed', "you're in", 'you’re in', 'all set', 'welcome aboard'];
+    const lastIsClosingOutbound =
+      lastMessage?.direction === 'outbound' &&
+      closingWords.some((w) => lastMessage.body.toLowerCase().includes(w));
+    const customerWaiting =
+      !!lastInbound && (!lastOutbound || lastOutbound.created_at < lastInbound.created_at);
+    if (lastIsClosingOutbound && !customerWaiting) return delay(null);
+
+    // Silence rule 2 — the customer just declined. A follow-up would be pushy.
+    const declineWords = ['no thanks', 'not interested', 'stop texting', 'leave me alone', 'we passed'];
+    if (declineWords.some((w) => inboundText.includes(w))) return delay(null);
+
+    // Silence rule 3 — our last outbound is unanswered and still fresh (< 1h).
+    // Double-texting inside the hour reads as pushy; wait for a reply.
+    if (lastMessage?.direction === 'outbound' && !customerWaiting) {
+      const ageMs = this.now() - new Date(lastMessage.created_at).getTime();
+      if (ageMs >= 0 && ageMs < 60 * 60_000) return delay(null);
+    }
+
+    // Otherwise build the message. Body sounds like the Hartley drafts: short,
+    // human, one question max, names Tom where natural. rationale cites the data.
+    const scopes = this.consentScopes(c.id);
+    const rationale: string[] = [];
+    let body: string;
+    let playbookLabel: string;
+
+    const renewsSoon = c.xDateDays !== null && c.xDateDays >= 0 && c.xDateDays <= 45;
+    const lapsed = c.status === 'lapsed_quote';
+    const autoOnly = c.lob === 'Auto';
+
+    if (renewsSoon) {
+      // Renewal proximity is the strongest driver.
+      playbookLabel = 'Renewal reminder';
+      rationale.push(`Renews ${this.friendlyDate(c.xDateDays!)} (${c.xDateDays} days)`);
+      const afterSix = hasMem('after 6pm') || hasMem('evening');
+      if (afterSix) rationale.push('Prefers texts after 6pm');
+      if (hasMem('teenage driver')) rationale.push('Teenage driver starting this fall');
+      const timeHint = afterSix ? 'this evening' : 'this week';
+      body = `Hi ${first} — your ${c.lob ?? 'policy'} renews ${this.friendlyDate(
+        c.xDateDays!,
+      )}. Tom set aside time to go over your options first. Want to grab 15 minutes ${timeHint}?`;
+    } else if (lapsed && customerWaiting && /quote|number|refresh|deciding|still/.test(inboundText)) {
+      // They replied to a lapsed-quote nudge and are still deciding — offer the
+      // refresh they asked about. Grounded in the actual inbound keywords.
+      playbookLabel = 'Win back lapsed quotes';
+      rationale.push('Quote lapsed — customer still deciding');
+      rationale.push(`Their last reply: “${this.trim(lastInbound!.body, 48)}”`);
+      body = `No rush ${first} — want me to have Tom refresh those numbers so you're comparing the latest? Happy to hold your prior quote while you decide.`;
+    } else if (lapsed) {
+      // A cold lapsed quote we can reactivate (marketing consent required to send;
+      // the gate enforces it — we suggest honestly and let the gate decide).
+      playbookLabel = 'Win back lapsed quotes';
+      rationale.push('Quote lapsed — reactivation candidate');
+      if (!scopes.has('marketing')) rationale.push('No marketing consent — gate will hold');
+      body = `Hi ${first} — your quote from earlier this year is about to expire. Rates moved recently, so it's worth a fresh look. Want Tom to pull updated numbers?`;
+    } else if (c.status === 'new_lead') {
+      // A new lead who reached out — speed-to-lead follow-up. If they asked a
+      // coverage question we keep it non-advisory (Tom answers the specifics).
+      playbookLabel = 'Speed to lead';
+      rationale.push('New lead — reached out about a quote');
+      if (/liability|coverage|limit/.test(inboundText)) {
+        rationale.push('Asked about coverage limits — Tom to advise');
+        body = `Hi ${first} — good question on the limits. Tom can walk you through what fits your situation; want a quick call this week to lock in your numbers?`;
+      } else {
+        body = `Hi ${first} — thanks for reaching out about a quote. I can pull your numbers together today; what's a good time for a quick call?`;
+      }
+      if (autoOnly) rationale.push('Auto only — bundle candidate');
+    } else if (autoOnly) {
+      // An insured auto-only customer with nothing pressing — a gentle bundle
+      // mention (marketing; gate enforces consent).
+      playbookLabel = 'Bundle upsell';
+      rationale.push('Auto only — bundle candidate');
+      if (!scopes.has('marketing')) rationale.push('No marketing consent — gate will hold');
+      body = `Hi ${first} — you're insured on auto with us. Bundling your home policy usually trims both premiums. Want Tom to run the combined number?`;
+    } else {
+      // Nothing actionable stands out — silence beats a filler text.
+      return delay(null);
+    }
+
+    return delay({ body, playbookLabel, held: false, draftId: undefined, rationale });
+  }
+
+  // Rationale for a HELD draft — cites the contact's real data (renewal window,
+  // memory atoms) rather than restating the draft prose. 1–3 short reasons.
+  private rationaleFor(c: FixtureContact, hasMem: (needle: string) => boolean): string[] {
+    const reasons: string[] = [];
+    if (c.xDateDays !== null && c.xDateDays >= 0 && c.xDateDays <= 45) {
+      reasons.push(`Renews ${this.friendlyDate(c.xDateDays)} (${c.xDateDays} days)`);
+    }
+    if (hasMem('after 6pm') || hasMem('evening')) reasons.push('Prefers texts after 6pm');
+    if (hasMem('teenage driver')) reasons.push('Teenage driver starting this fall');
+    if (hasMem('rate increase') && reasons.length < 3) reasons.push('Sore about last year’s rate increase');
+    if (c.status === 'lapsed_quote' && reasons.length < 3) reasons.push('Quote lapsed — reactivation candidate');
+    if (reasons.length === 0) reasons.push(`On the ${c.lob ?? 'no'} line`);
+    return reasons.slice(0, 3);
+  }
+
+  // Map a held draft to a plain playbook label from its id / classification.
+  private playbookLabelFor(m: FixtureMessage): string {
+    if (m.id.includes('renewal_reminder')) return 'Renewal reminder';
+    if (m.id.includes('winback_lapsed')) return 'Win back lapsed quotes';
+    if (m.id.includes('bundle_upsell')) return 'Bundle upsell';
+    if (m.id.includes('speed_to_lead')) return 'Speed to lead';
+    if (m.id.includes('draft')) return 'Reply draft';
+    return m.classification === 'marketing' ? 'Win back lapsed quotes' : 'Renewal reminder';
+  }
+
+  // A friendly month-day for a renewal N days out (e.g. "Aug 2"), from the pinned
+  // demo clock so the label agrees with x_date. Deterministic, no locale drift.
+  private friendlyDate(days: number): string {
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const d = new Date(DEMO_NOW.getTime() + days * 86_400_000);
+    return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
   }
 
   // Short helpers for the brief/ask narration.

@@ -34,6 +34,8 @@ import {
   CampaignCard,
   BriefCard,
   SearchCard,
+  CallListCard,
+  MissedCallReply,
   HelpCard,
 } from './ReplyCards.tsx';
 import type { ReplyMeta } from './ReplyCards.tsx';
@@ -114,6 +116,10 @@ function thinkingLabel(intent: Intent): string {
       return 'Building the brief…';
     case 'search':
       return 'Searching conversations and memory…';
+    case 'call_list':
+      return 'Ranking the book for calls…';
+    case 'missed_call':
+      return 'Capturing the missed call…';
     case 'pause':
     case 'resume':
       return 'Preparing the confirmation…';
@@ -289,6 +295,29 @@ export default function HomeScreen() {
           resolveThinking(
             <SearchCard query={intent.query} hits={hits} meta={meta} />,
           );
+          break;
+        }
+        case 'call_list': {
+          const t0 = performance.now();
+          const rows = await client.callList();
+          const meta: ReplyMeta = {
+            disclosure: disclosureFor(intent),
+            durationMs: performance.now() - t0,
+          };
+          resolveThinking(<CallListCard rows={rows} meta={meta} />);
+          break;
+        }
+        case 'missed_call': {
+          const t0 = performance.now();
+          const { conversationId } = await client.simulateMissedCall();
+          const meta: ReplyMeta = {
+            disclosure: disclosureFor(intent),
+            durationMs: performance.now() - t0,
+          };
+          resolveThinking(
+            <MissedCallReply conversationId={conversationId} meta={meta} />,
+          );
+          pulse.refetch(); // a new conversation is now running
           break;
         }
         case 'pause': {

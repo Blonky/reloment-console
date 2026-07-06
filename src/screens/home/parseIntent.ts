@@ -17,6 +17,8 @@ export type Intent =
   | { kind: 'campaign_status' } // client.campaignStatus()
   | { kind: 'brief'; name: string } // client.threadBrief(resolve(name))
   | { kind: 'search'; query: string } // client.searchConversations(query)
+  | { kind: 'call_list' } // client.callList() — the producer worklist
+  | { kind: 'missed_call' } // client.simulateMissedCall() — text-back demo
   | { kind: 'pause' } // kill switch → on (typed confirm)
   | { kind: 'resume' } // kill switch → off (typed confirm)
   | { kind: 'help' }; // honest capabilities card
@@ -58,6 +60,25 @@ const PAUSE_PATTERNS: RegExp[] = [
   /\bfreeze (sending|sends|everything|all)\b/,
   /\bhold all (sends|sending)\b/,
   /\bemergency stop\b/,
+];
+
+// "who should we call" / "call list" / "who to call today" / "prioritize calls"
+const CALL_LIST_PATTERNS: RegExp[] = [
+  /\bcall list\b/,
+  /\bwho (should|do) (we|i) call\b/,
+  /\bwho to call\b/,
+  /\bwho('?s| is) worth (a )?call\b/,
+  /\b(prioriti[sz]e|rank) (my )?(calls?|dials?|book|outreach)\b/,
+  /\bwho should i (be )?(dial|call)/,
+  /\b(build|make|show) (me )?(a |the )?(call|dial) list\b/,
+];
+
+// "simulate a missed call" / "missed call" — the text-back demo affordance.
+const MISSED_CALL_PATTERNS: RegExp[] = [
+  /\bmissed calls?\b/,
+  /\b(simulate|trigger|test|demo) (a )?(missed )?call/,
+  /\bcall (came in|dropped|went unanswered)\b/,
+  /\btext[- ]?back\b/,
 ];
 
 const ENROLL_WINBACK_PATTERNS: RegExp[] = [
@@ -157,6 +178,12 @@ export function parseIntent(input: string): Intent {
   if (any(text, RESUME_PATTERNS)) return { kind: 'resume' };
   if (any(text, PAUSE_PATTERNS)) return { kind: 'pause' };
 
+  // Operations verbs before the generic book reads: the missed-call demo and
+  // the producer call list both carry "call" tokens the renewal/lapsed banks
+  // must not shadow. Missed-call first (more specific), then the call list.
+  if (any(text, MISSED_CALL_PATTERNS)) return { kind: 'missed_call' };
+  if (any(text, CALL_LIST_PATTERNS)) return { kind: 'call_list' };
+
   // Enroll before generic lapsed/renewal reads (it references the same nouns).
   if (any(text, ENROLL_WINBACK_PATTERNS)) return { kind: 'enroll_winback' };
 
@@ -205,6 +232,11 @@ export const COMMAND_CATALOGUE: CommandDoc[] = [
     label: 'Campaign status',
     example: 'Campaign status',
     blurb: 'Enrolled / excluded / drafts pending per playbook.',
+  },
+  {
+    label: 'Who should we call today',
+    example: 'Who should we call today',
+    blurb: 'A ranked producer worklist — texting is never suggested without consent.',
   },
   {
     label: 'Brief me on Dana',

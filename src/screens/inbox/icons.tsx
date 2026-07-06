@@ -36,13 +36,12 @@ export function SendIcon({ size = 16 }: IconProps) {
   );
 }
 
-export function HandIcon({ size = 16 }: IconProps) {
+// Up-arrow — the composer's circular accent send glyph (iMessage family).
+export function ArrowUpIcon({ size = 18 }: IconProps) {
   return (
-    <svg {...base(size)}>
-      <path d="M18 11V6a2 2 0 0 0-4 0v5" />
-      <path d="M14 10V4a2 2 0 0 0-4 0v6" />
-      <path d="M10 10.5V6a2 2 0 0 0-4 0v8" />
-      <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+    <svg {...base(size)} strokeWidth={2}>
+      <path d="M12 19V5" />
+      <path d="M5 12l7-7 7 7" />
     </svg>
   );
 }

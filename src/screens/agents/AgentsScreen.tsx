@@ -2,6 +2,7 @@ import { useClient } from '../../shell/ClientContext.tsx';
 import { useData } from '../../data/useData.ts';
 import { Card, EmptyState, Skeleton, Button } from '../../components/index.ts';
 import AgentCard from './AgentCard.tsx';
+import VoiceCard, { VoiceCardSkeleton } from './VoiceCard.tsx';
 import styles from './AgentsScreen.module.css';
 
 function LadderSkeleton() {
@@ -27,6 +28,7 @@ function LadderSkeleton() {
 export default function AgentsScreen() {
   const client = useClient();
   const { data, loading, error, refetch } = useData(() => client.agents(), [client]);
+  const tone = useData(() => client.toneProfile(), [client]);
 
   const lineNumber = '+1 512 555 0100';
 
@@ -37,6 +39,7 @@ export default function AgentsScreen() {
         <LadderSkeleton />
         <LadderSkeleton />
         <LadderSkeleton />
+        <VoiceCardSkeleton />
       </div>
     );
   } else if (error !== undefined) {
@@ -64,6 +67,11 @@ export default function AgentsScreen() {
         {data.map((agent) => (
           <AgentCard key={agent.key} agent={agent} />
         ))}
+        {tone.data !== undefined ? (
+          <VoiceCard profile={tone.data} />
+        ) : tone.loading ? (
+          <VoiceCardSkeleton />
+        ) : null}
       </div>
     );
   }

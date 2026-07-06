@@ -1,6 +1,6 @@
 import { useClient } from '../../shell/ClientContext.tsx';
 import { useData } from '../../data/useData.ts';
-import type { AuditRow, Contact } from '../../data/types.ts';
+import type { AuditRow, ConnectionRow, Contact } from '../../data/types.ts';
 import {
   Card,
   EmptyState,
@@ -237,10 +237,78 @@ function DataCompliance() {
   );
 }
 
+// ── Connections ──────────────────────────────────────────────────────────────
+// One coherent surface for the details Reloment needs FROM the business. Each
+// row is a wire the agency connects: status dot, name, the one line it powers,
+// and the single detail the business provides. Five rows, tight grid.
+function Connections({
+  loading,
+  error,
+  rows,
+  onRetry,
+}: {
+  loading: boolean;
+  error: boolean;
+  rows: ConnectionRow[] | undefined;
+  onRetry: () => void;
+}) {
+  return (
+    <Card title="Connections" padded={false}>
+      {loading ? (
+        <div className={styles.connGrid}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className={styles.connRow}>
+              <Skeleton width="60%" height={14} />
+              <Skeleton width="90%" height={12} />
+            </div>
+          ))}
+        </div>
+      ) : error ? (
+        <div className={styles.pad}>
+          <EmptyState
+            message="We couldn't load your connections."
+            action={
+              <Button variant="secondary" size="sm" onClick={onRetry}>
+                Try again
+              </Button>
+            }
+          />
+        </div>
+      ) : rows === undefined || rows.length === 0 ? (
+        <div className={styles.pad}>
+          <EmptyState message="No connections wired yet." />
+        </div>
+      ) : (
+        <div className={styles.connGrid}>
+          {rows.map((c) => {
+            const connected = c.status === 'connected';
+            return (
+              <div key={c.key} className={styles.connRow}>
+                <div className={styles.connHead}>
+                  <span className={styles.connTitle}>{c.name}</span>
+                  <span
+                    className={connected ? styles.connStatus : styles.connStatusAction}
+                  >
+                    <span className={connected ? styles.connDot : styles.connDotAction} />
+                    {connected ? 'Connected' : 'Action needed'}
+                  </span>
+                </div>
+                <p className={styles.connDetail}>{c.detail}</p>
+                <p className={styles.connPowers}>{c.powers}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function TrustScreen() {
   const client = useClient();
   const optOuts = useData(() => client.optOuts(), [client]);
   const audit = useData(() => client.auditSample(), [client]);
+  const connections = useData(() => client.connections(), [client]);
 
   return (
     <div className={styles.page}>
@@ -250,6 +318,13 @@ export default function TrustScreen() {
       </header>
 
       <KillSwitchCard />
+
+      <Connections
+        loading={connections.loading}
+        error={connections.error !== undefined}
+        rows={connections.data}
+        onRetry={connections.refetch}
+      />
 
       <OptOutLedger
         loading={optOuts.loading}

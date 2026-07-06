@@ -817,6 +817,50 @@
   margin-top: 12px;
 }
 
+/* ── Call list (ranked producer worklist) ──────────────────────────────────── */
+.callName {
+  display: block;
+  font-weight: 550;
+  color: var(--ink);
+}
+
+.callLob {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-2);
+  margin-top: 1px;
+}
+
+.callScore {
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.callReasons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.callReason {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--ink-2);
+}
+
+.callActionCell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.callActionNote {
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
 .inspFollowUp a {
   font-weight: 600;
 }

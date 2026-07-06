@@ -65,15 +65,21 @@ export function disclosureFor(
 ): GateDisclosure {
   switch (intent.kind) {
     // Read-only book/brief/search reads attempt no sends → run no gate checks.
+    // The call list ranks the book without sending anything either.
     case 'renewals':
     case 'lapsed':
     case 'brief':
     case 'search':
+    case 'call_list':
       return { kind: 'read_only' };
 
     // The kill switch is a control action — it toggles the gate, not a send.
+    // The missed-call text-back is auto-sent by the runtime (inquiry basis)
+    // rather than by an operator command, so the command itself is a control
+    // trigger — the send it kicks off is gated separately inside the runtime.
     case 'pause':
     case 'resume':
+    case 'missed_call':
       return { kind: 'control' };
 
     case 'campaign_status':

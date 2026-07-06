@@ -102,6 +102,24 @@
   white-space: nowrap;
 }
 
+/* Honest one-line autonomy statement under the message template. */
+.autonomyNote {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.autonomyNote::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
 /* ── Run figures ────────────────────────────────────────────────────────── */
 .figures {
   display: grid;
@@ -152,13 +170,6 @@
 .exclusions {
   display: flex;
   flex-direction: column;
-}
-
-.cleared {
-  margin: 0;
-  font-size: 13px;
-  color: var(--ink-2);
-  line-height: 1.45;
 }
 
 .exclusionList {

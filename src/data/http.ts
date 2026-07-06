@@ -8,7 +8,9 @@ import type {
   ApproveResult,
   AuditRow,
   BookRow,
+  CallListRow,
   CampaignRow,
+  ConnectionRow,
   Contact,
   ConversationBrief,
   EnrollResult,
@@ -17,9 +19,11 @@ import type {
   InboundResult,
   QueueItem,
   SearchHit,
+  Suggestion,
   ThreadBrief,
   ThreadDetail,
   ThreadMessage,
+  ToneProfile,
   OutcomeRow,
   LineAgent,
 } from './types.ts';
@@ -150,15 +154,55 @@ export class HttpClient implements DataClient {
     );
   }
 
-  async takeover(conversationId: string): Promise<void> {
+  // Messages-first thread (v4): the Agent ON/OFF switch. POST the new state; a
+  // missing/failing route degrades to a silent no-op rather than throwing at UI.
+  async setAgentEnabled(conversationId: string, enabled: boolean): Promise<void> {
     await this.post<{ ok: boolean }>(
-      `/api/threads/${encodeURIComponent(conversationId)}/takeover`,
-      {},
-    );
+      `/api/threads/${encodeURIComponent(conversationId)}/agent`,
+      { enabled },
+    ).catch(() => undefined);
+  }
+
+  // takeover() is a thin alias for turning the agent OFF, kept for compatibility.
+  async takeover(conversationId: string): Promise<void> {
+    await this.setAgentEnabled(conversationId, false);
+  }
+
+  // The agent's next-best message for the composer. A missing route or a "no
+  // suggestion" answer both resolve to null (the honest silence state).
+  async suggestion(conversationId: string): Promise<Suggestion | null> {
+    return this.req<Suggestion | null>(
+      `/api/threads/${encodeURIComponent(conversationId)}/suggestion`,
+    ).catch(() => null);
   }
 
   simulateInbound(conversationId: string, text: string): Promise<InboundResult> {
     return this.post<InboundResult>('/api/simulate/inbound', { conversationId, text });
+  }
+
+  // ── Operations (round 7) ────────────────────────────────────────────────────
+  // A missed call arrives via the voice-capture forward and the provider emits
+  // it on the SSE stream; here we ask the backend to simulate one for the demo.
+  simulateMissedCall(): Promise<{ conversationId: string }> {
+    return this.post<{ conversationId: string }>('/api/simulate/missed_call', {});
+  }
+
+  // Human follow-up — the backend re-runs the send gate (fail-closed): a clear
+  // gate returns { ok:true }; a block returns { ok:false, blockedReason }.
+  sendManual(conversationId: string, body: string): Promise<{ ok: boolean; blockedReason?: string }> {
+    return this.post<{ ok: boolean; blockedReason?: string }>(
+      `/api/threads/${encodeURIComponent(conversationId)}/send`,
+      { body },
+    ).catch(() => ({ ok: false, blockedReason: 'gate_error' }));
+  }
+
+  // Gated document request (silently a no-op if blocked). The customer's media
+  // reply arrives later over the SSE stream as a message.received with parts.
+  async requestDocument(conversationId: string, docType: string): Promise<void> {
+    await this.post<{ ok: boolean }>(
+      `/api/threads/${encodeURIComponent(conversationId)}/request_document`,
+      { docType },
+    ).catch(() => undefined);
   }
 
   async queryBook(kind: 'renewals' | 'lapsed'): Promise<BookRow[]> {
@@ -237,5 +281,32 @@ export class HttpClient implements DataClient {
   }
   async optOuts(): Promise<Contact[]> {
     return this.req<Contact[]>('/api/opt-outs').catch(() => []);
+  }
+
+  // Producer worklist — served empty rather than faked when the route is absent.
+  async callList(): Promise<CallListRow[]> {
+    return this.req<CallListRow[]>('/api/call-list').catch(() => []);
+  }
+
+  // Voice/tone tuning profile — degrades to an honest untuned placeholder.
+  async toneProfile(): Promise<ToneProfile> {
+    return this.req<ToneProfile>('/api/tone-profile').catch(() => ({
+      trainedOn: 'Not yet tuned — connect the platform to train on your conversations.',
+      traits: [],
+      example: { generic: '', tuned: '' },
+    }));
+  }
+
+  // Booking connection — degrades to a not-connected honest state.
+  async bookingConnection(): Promise<{ provider: string; status: 'connected'; calendar: string }> {
+    return this.req<{ provider: string; status: 'connected'; calendar: string }>(
+      '/api/booking-connection',
+    ).catch(() => ({ provider: '—', status: 'connected', calendar: 'Not connected' }));
+  }
+
+  // The Connections surface — served empty when the route is absent, so the
+  // Trust grid degrades honestly (nothing shown as connected without proof).
+  async connections(): Promise<ConnectionRow[]> {
+    return this.req<ConnectionRow[]>('/api/connections').catch(() => []);
   }
 }

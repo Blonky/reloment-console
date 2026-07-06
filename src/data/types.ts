@@ -49,6 +49,7 @@ export type MessageStatus =
   | 'held'
   | 'opted_out'
   | 'opted_back_in'
+  | 'missed_call'
   | string; // blocked_<reason> is dynamic — keep the door open
 
 export type Direction = 'inbound' | 'outbound';
@@ -66,7 +67,15 @@ export type FeedEvent =
   | { type: 'message.received'; conversationId: string; message: ThreadMessage }
   | { type: 'draft.created'; conversationId: string; message: ThreadMessage }
   | { type: 'message.sent'; conversationId: string; message: ThreadMessage }
-  | { type: 'consent.changed'; conversationId: string; contactId: string; optedOut: boolean };
+  | { type: 'consent.changed'; conversationId: string; contactId: string; optedOut: boolean }
+  // A missed call on a messaging-only line arrives via Reloment's voice-capture
+  // forward, which emits this event so the text-back playbook can engage.
+  | { type: 'call.missed'; conversationId: string; callerName: string; e164: string }
+  // Messages-first thread (v4): the per-conversation Agent ON/OFF switch flipped.
+  | { type: 'agent.toggled'; conversationId: string; enabled: boolean }
+  // Fires after ANY message lands (or the toggle/consent changes) so the UI
+  // refetches suggestion() — the agent's next-best message regenerates each turn.
+  | { type: 'suggestion.updated'; conversationId: string };
 
 // ── /api/home ───────────────────────────────────────────────────────────────
 export interface HomePulse {
@@ -96,6 +105,12 @@ export interface QueueItem {
 // ── /api/threads/:id ────────────────────────────────────────────────────────
 export interface ThreadConversation {
   id: string;
+  // Messages-first thread (v4): the per-conversation Agent ON/OFF switch. When
+  // ON the agent proposes/held-drafts and its suggestion is its next-best move;
+  // when OFF it stays silent but still surfaces an assistive suggestion.
+  agent_enabled: boolean;
+  // Legacy mirror of agent_enabled ('agent' when ON, 'human' when OFF). Kept
+  // populated so not-yet-updated UI keeps compiling; new UI reads agent_enabled.
   controller: 'agent' | 'human' | string;
   contact_id: string;
   display_name: string;
@@ -106,6 +121,15 @@ export interface ThreadConversation {
   x_date: string | null;
 }
 
+// Inbound messages can carry media parts, mirroring the provider's message
+// payload shape ({ type:'media', attachment_id, filename, mime_type, size_bytes }).
+export interface MediaPart {
+  type: 'media';
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+}
+
 export interface ThreadMessage {
   id: string;
   direction: Direction;
@@ -114,6 +138,7 @@ export interface ThreadMessage {
   channel_accepted: Channel;
   advice_verdict: AdviceVerdict;
   created_at: string;
+  parts?: MediaPart[];
 }
 
 export interface MemoryAtom {
@@ -132,6 +157,20 @@ export interface ThreadDetail {
   memory: MemoryAtom[];
   consents: ConsentRecord[];
   optedOut: boolean;
+}
+
+// ── Messages-first suggestion (v4) ──────────────────────────────────────────
+// The agent's next-best message, shown ABOVE the composer and regenerated after
+// every turn. Either a gate-held draft awaiting approval (held: true) or a purely
+// assistive draft the human can send or ignore (held: false). null = the honest
+// "silence is sometimes the best action" state (opted out, or a nudge would be
+// pushy). rationale MUST cite the real thread/contact data the body was built on.
+export interface Suggestion {
+  body: string;
+  playbookLabel: string;
+  held: boolean; // true when this is a gate-held draft awaiting approval
+  draftId?: string; // present when held — approve(draftId) sends it
+  rationale: string[]; // 1–3 short data-aware reasons, e.g. "Renews Aug 2"
 }
 
 // ── approve → ApproveResult ─────────────────────────────────────────────────
@@ -255,4 +294,39 @@ export interface AuditRow {
   action: string;
   reason: string; // plain reason / auditReason
   hash: string; // short hash-chain digest
+}
+
+// ── Call list (deterministic priority ranking over the book) ────────────────
+// Who the producer should reach out to next, ranked by renewal proximity,
+// engagement, policy status, and LOB gaps. consentState drives the suggested
+// action: an unconsented lead is never suggested for a text (the gate refuses
+// it) — calling them is always fine.
+export interface CallListRow {
+  contactId: string;
+  name: string;
+  lob: string | null;
+  score: number;
+  reasons: string[];
+  consentState: 'ok' | 'opted_out' | 'none';
+  suggestedAction: string;
+}
+
+// ── Voice/tone profile (how the agents were tuned to the agency's voice) ─────
+export interface ToneProfile {
+  trainedOn: string;
+  traits: string[];
+  example: { generic: string; tuned: string };
+}
+
+// ── Connections (Trust & Settings) ──────────────────────────────────────────
+// The details Reloment needs FROM the business, woven into one surface: each
+// row is a wire the agency connects, its live status, the one line it powers,
+// and the single detail the business provided. Composed from existing fixtures
+// (booking, tone) so there's one read for the whole grid.
+export interface ConnectionRow {
+  key: string;
+  name: string;
+  status: 'connected' | 'action_needed';
+  powers: string; // one line: what this connection powers
+  detail: string; // the single detail the business provides
 }

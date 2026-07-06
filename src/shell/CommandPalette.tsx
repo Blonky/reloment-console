@@ -131,6 +131,11 @@ const IconResume = (
     <path d="M6.5 5.5 10.5 8l-4 2.5z" />
   </Svg>
 );
+const IconCall = (
+  <Svg>
+    <path d="M13.5 11.2v1.8a1.2 1.2 0 0 1-1.3 1.2 11.8 11.8 0 0 1-5.2-1.8 11.6 11.6 0 0 1-3.6-3.6A11.8 11.8 0 0 1 1.6 3.6 1.2 1.2 0 0 1 2.8 2.3h1.8a1.2 1.2 0 0 1 1.2 1c.08.6.22 1.15.42 1.7a1.2 1.2 0 0 1-.27 1.27l-.76.76a9.6 9.6 0 0 0 3.6 3.6l.76-.76a1.2 1.2 0 0 1 1.27-.27c.55.2 1.1.34 1.7.42a1.2 1.2 0 0 1 1 1.2z" />
+  </Svg>
+);
 
 // ── Item model ────────────────────────────────────────────────────────────────
 type PaletteItem = {
@@ -156,6 +161,7 @@ const ITEMS: PaletteItem[] = [
   { id: 'cmd-lapsing', kind: 'command', phrase: "Who's lapsing", label: "Who's lapsing", group: 'Commands', icon: IconLapsing, keywords: 'lapsed cold dropped off win-back candidates' },
   { id: 'cmd-enroll', kind: 'command', phrase: 'Enroll win-back', label: 'Enroll win-back', group: 'Commands', icon: IconEnroll, keywords: 'winback playbook enroll re-engage lapsed run' },
   { id: 'cmd-campaign', kind: 'command', phrase: 'Campaign status', label: 'Campaign status', group: 'Commands', icon: IconCampaignStatus, keywords: 'campaigns progress enrolled excluded sent replied' },
+  { id: 'cmd-calllist', kind: 'command', phrase: 'Who should we call today', label: 'Who should we call today', group: 'Commands', icon: IconCall, keywords: 'call list dial prioritize producer worklist leads signals who to call' },
   { id: 'cmd-brief', kind: 'command', phrase: 'Brief me on Dana', label: 'Brief me on Dana', group: 'Commands', icon: IconBrief, keywords: 'brief contact story background dana memory consent' },
   { id: 'cmd-pause', kind: 'command', phrase: 'Pause all sending', label: 'Pause all sending', group: 'Commands', icon: IconPause, keywords: 'kill switch stop halt freeze emergency pause everything' },
   { id: 'cmd-resume', kind: 'command', phrase: 'Resume sending', label: 'Resume sending', group: 'Commands', icon: IconResume, keywords: 'unpause resume start again re-enable clear' },

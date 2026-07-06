@@ -20,6 +20,9 @@ export interface PlaybookMeta {
   counselSigned: boolean;
   stats: RunStats;
   exclusions: Exclusion[];
+  // A one-line, honest statement of how autonomously this playbook sends —
+  // draft-for-approval vs an inquiry-basis auto-acknowledgement. Optional.
+  autonomyNote?: string;
 }
 
 // The canonical governed story. Numbers stay coherent:
@@ -31,6 +34,7 @@ export const PLAYBOOK_META: Record<string, PlaybookMeta> = {
     counselSigned: true,
     stats: { enrolled: 3, excluded: 0, sent: 3, replied: 2 },
     exclusions: [],
+    autonomyNote: 'Draft-for-approval — every send waits on you.',
   },
   speed_to_lead: {
     template:
@@ -38,6 +42,7 @@ export const PLAYBOOK_META: Record<string, PlaybookMeta> = {
     counselSigned: true,
     stats: { enrolled: 1, excluded: 0, sent: 1, replied: 1 },
     exclusions: [],
+    autonomyNote: 'Draft-for-approval — every send waits on you.',
   },
   winback_lapsed: {
     template:
@@ -48,6 +53,25 @@ export const PLAYBOOK_META: Record<string, PlaybookMeta> = {
       { name: 'Sam Ortiz', reason: 'opted_out' },
       { name: 'Lee Nguyen', reason: 'no_marketing_consent' },
     ],
+    autonomyNote: 'Draft-for-approval — every send waits on you.',
+  },
+  missed_call: {
+    template:
+      "Sorry we missed your call — this is Hartley Insurance's text line. How can we help?",
+    counselSigned: true,
+    // Triggered by inbound calls, not enrolled — the acknowledgement auto-sends
+    // on inquiry basis and still clears the gate.
+    stats: { enrolled: 1, excluded: 0, sent: 1, replied: 1 },
+    exclusions: [],
+    autonomyNote: 'Auto-sends the acknowledgment — inquiry basis, still gated.',
+  },
+  bundle_upsell: {
+    template:
+      "Hi {first_name} — you're insured on auto with us. Bundling your home policy usually trims both premiums. Want Tom to run the combined number?",
+    counselSigned: true,
+    stats: { enrolled: 3, excluded: 1, sent: 3, replied: 1 },
+    exclusions: [{ name: 'Sam Ortiz', reason: 'opted_out' }],
+    autonomyNote: 'Draft-for-approval — every send waits on you.',
   },
 };
 

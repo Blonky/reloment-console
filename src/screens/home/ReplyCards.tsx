@@ -26,6 +26,7 @@ import {
 import type { StatusTone } from '../../components/index.ts';
 import type {
   BookRow,
+  CallListRow,
   CampaignRow,
   EnrollResult,
   SearchHit,
@@ -38,6 +39,8 @@ import {
   IconCampaign,
   IconBrief,
   IconSearch,
+  IconPhone,
+  IconMissedCall,
 } from './icons.tsx';
 import { COMMAND_CATALOGUE } from './parseIntent.ts';
 import ArtifactCard from './ArtifactCard.tsx';
@@ -545,6 +548,143 @@ export function SearchCard({
             </Link>
           ))}
         </div>
+      </ArtifactCard>
+    </ReplyShell>
+  );
+}
+
+// ── Call list → artifact + Inspector ranked table ─────────────────────────────
+// The producer worklist. Contacts with no valid consent still appear, but their
+// action pill is always "Call" (with a "no texting consent" caption) — texting
+// an unconsented lead is exactly what the gate refuses; a phone call is fine.
+export function CallListCard({
+  rows,
+  meta,
+}: {
+  rows: CallListRow[];
+  meta: ReplyMeta;
+}) {
+  const n = rows.length;
+  if (n === 0) {
+    return (
+      <ReplyShell narration="No one in the book needs a call today." meta={meta}>
+        <EmptyState message="Nobody has a signal worth a call right now — the book is quiet." />
+      </ReplyShell>
+    );
+  }
+
+  const narration = `Ranked your book — ${n} ${
+    n === 1 ? 'person' : 'people'
+  } worth a call today.`;
+
+  return (
+    <ReplyShell narration={narration} meta={meta}>
+      <ArtifactCard
+        icon={<IconPhone />}
+        title="Call list"
+        count={`${n}`}
+        summary="Who to call next — ranked over renewals, engagement, and gaps."
+        action="View list"
+        inspectorTitle={`Call list · ${n}`}
+      >
+        <div className={styles.inspTableScroll}>
+          <Table>
+            <THead>
+              <TR>
+                <TH>#</TH>
+                <TH>Name</TH>
+                <TH>Score</TH>
+                <TH>Why</TH>
+                <TH>Action</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {rows.map((r, i) => {
+                const textable = r.suggestedAction === 'Text';
+                return (
+                  <TR key={r.contactId}>
+                    <TD num>{i + 1}</TD>
+                    <TD>
+                      <span className={styles.callName}>{r.name}</span>
+                      {r.lob !== null && (
+                        <span className={styles.callLob}>{r.lob}</span>
+                      )}
+                    </TD>
+                    <TD num>
+                      <span className={styles.callScore}>{r.score}</span>
+                    </TD>
+                    <TD>
+                      <span className={styles.callReasons}>
+                        {r.reasons.map((reason, j) => (
+                          <span className={styles.callReason} key={j}>
+                            {reason}
+                          </span>
+                        ))}
+                      </span>
+                    </TD>
+                    <TD>
+                      <span className={styles.callActionCell}>
+                        <StatusPill tone={textable ? 'ok' : 'neutral'}>
+                          {textable ? 'Text first' : 'Call'}
+                        </StatusPill>
+                        {!textable && (
+                          <span className={styles.callActionNote}>
+                            no texting consent
+                          </span>
+                        )}
+                      </span>
+                    </TD>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
+        </div>
+        <p className={styles.inspFollowUp}>
+          Unconsented leads never get a text suggestion — the gate refuses it, so
+          a call is the honest next step.
+        </p>
+      </ArtifactCard>
+    </ReplyShell>
+  );
+}
+
+// ── Missed-call text-back — a control reply that narrates the auto-send ────────
+// The command triggers simulateMissedCall(); the runtime auto-sends the
+// acknowledgement inside the gate. The artifact links into the live thread so
+// the operator can WATCH the missed-call entry → typing → auto-ack.
+export function MissedCallReply({
+  conversationId,
+  meta,
+}: {
+  conversationId: string | null;
+  meta: ReplyMeta;
+}) {
+  const href =
+    conversationId !== null
+      ? `/inbox?c=${encodeURIComponent(conversationId)}`
+      : '/inbox';
+  return (
+    <ReplyShell
+      narration="Missed call captured — the text-back playbook answered inside the gate."
+      meta={meta}
+    >
+      <ArtifactCard
+        icon={<IconMissedCall />}
+        title="Missed-call text-back"
+        summary="Auto-acknowledged on inquiry basis — still gated, opt-outs never texted."
+        action="View conversation"
+        inspectorTitle="Missed-call text-back"
+      >
+        <p className={styles.briefSummary}>
+          A caller reached the messaging-only line and hung up. The voice-capture
+          forward minted a conversation, recorded consent on inquiry basis, and
+          the missed-call playbook auto-sent the acknowledgement — after clearing
+          the send gate. Nothing goes out to a caller on the opt-out list.
+        </p>
+        <p className={styles.inspFollowUp}>
+          <Link to={href}>Open the conversation →</Link>
+        </p>
       </ArtifactCard>
     </ReplyShell>
   );

@@ -10,6 +10,7 @@ import type {
   Channel,
   Classification,
   Direction,
+  MediaPart,
   MessageStatus,
 } from './types.ts';
 
@@ -167,6 +168,24 @@ export const CONTACTS: FixtureContact[] = [
     imessageCapable: true,
     memory: [],
   },
+  // Ray Delgado — a NEW caller with no prior conversation. He reaches the line
+  // by phone; because the line is messaging-only (no voice), the missed call is
+  // forwarded to text-back. Consent basis 'inbound_call' is recorded at call
+  // time by simulateMissedCall — so his fixture starts with NO consent on file
+  // (the call list surfaces him as consentState 'none' → suggested action Call).
+  {
+    id: 'ct_ray',
+    name: 'Ray Delgado',
+    e164: '+15125550301',
+    lob: null,
+    status: 'new_lead',
+    xDateDays: null,
+    tz: 'America/Chicago',
+    consents: [],
+    optedOut: false,
+    imessageCapable: true,
+    memory: [{ value: 'Called the line — no policy on file yet', source: 'inbound_call' }],
+  },
 ];
 
 export const contactById = (id: string): FixtureContact | undefined =>
@@ -184,6 +203,7 @@ export interface FixtureMessage {
   advice_verdict: AdviceVerdict;
   classification: Classification;
   created_at: string;
+  parts?: MediaPart[];
 }
 export interface FixtureThread {
   conversationId: string;
@@ -294,6 +314,12 @@ export const threadByContactId = (contactId: string): FixtureThread | undefined 
   THREADS.find((t) => t.contactId === contactId);
 
 // ── Playbooks (seed.ts, classification counsel-signed at playbook level) ────
+// autonomy here is the playbook's autonomy CEILING, plain-language:
+//   'draft'         — always drafts, never sends without approval
+//   'auto_send_ack' — may auto-send a bounded acknowledgement (e.g. a missed-
+//                     call text-back on inquiry basis); still passes the gate
+export type PlaybookAutonomy = 'draft' | 'auto_send_ack';
+
 export interface FixturePlaybook {
   key: string;
   name: string;
@@ -301,6 +327,11 @@ export interface FixturePlaybook {
   status: string;
   template: string;
   counselSigned: boolean;
+  // Optional round-7 enrichments (older playbooks omit them; the console's
+  // campaign_status mapping does not depend on these fields).
+  trigger?: string; // e.g. 'call.missed' — what starts the playbook
+  autonomy?: PlaybookAutonomy;
+  description?: string;
 }
 export const PLAYBOOKS: FixturePlaybook[] = [
   {
@@ -329,6 +360,34 @@ export const PLAYBOOKS: FixturePlaybook[] = [
     template:
       'Hi {first_name} — your quote from earlier this year is about to expire. Rates moved recently, so it’s worth a fresh look before it does. Want updated numbers?',
     counselSigned: true,
+    autonomy: 'draft',
+    description:
+      'Reactivates dead leads whose quote lapsed but whose consent is still valid — never texts anyone who opted out or was never granted marketing consent.',
+  },
+  {
+    key: 'missed_call',
+    name: 'Missed-call text-back',
+    classification: 'transactional',
+    status: 'active',
+    template:
+      'Sorry we missed your call — this is Hartley Insurance’s text line. How can we help?',
+    counselSigned: true,
+    trigger: 'call.missed',
+    autonomy: 'auto_send_ack',
+    description:
+      'The line is messaging-only, so a missed call is forwarded to text-back. Because the caller just reached out, the acknowledgement runs on inquiry consent basis and may auto-send within the ceiling — but it still passes the send gate (an opted-out caller gets no text).',
+  },
+  {
+    key: 'bundle_upsell',
+    name: 'Bundle upsell',
+    classification: 'marketing',
+    status: 'active',
+    template:
+      'Hi {first_name} — you’re insured on auto with us. Bundling your home policy usually trims both premiums. Want Tom to run the combined number?',
+    counselSigned: true,
+    autonomy: 'draft',
+    description:
+      'Cross-sells auto-only customers into auto+home. Draft-for-approval — every send waits on the producer, and marketing consent is required to text.',
   },
 ];
 
@@ -449,3 +508,28 @@ export function lastActivityFor(contactId: string): string {
   if (!t || t.messages.length === 0) return tsMin(-100000);
   return t.messages[t.messages.length - 1].created_at;
 }
+
+// ── Voice/tone profile — how the agents were tuned to Hartley's voice ────────
+// The tuned example should sound like the existing Hartley drafts (plain,
+// names the human, one ask).
+export const TONE_PROFILE = {
+  trainedOn: '412 conversations from your two highest-retention producers',
+  traits: [
+    'Plain answers before paperwork',
+    "Names the human ('Tom will call you')",
+    'Never more than one question per text',
+  ],
+  example: {
+    generic:
+      'Dear valued customer, your policy is approaching its renewal date. Please contact our office at your earliest convenience to discuss your coverage options and any applicable rate adjustments.',
+    tuned:
+      'Hi Dana — your auto+home renews Aug 2. Rates shifted this year, so Tom’s set aside time to go over your options first. Want Thursday at 5:30, after work?',
+  },
+} as const;
+
+// ── Booking connection (drafts already propose times; this is the wiring) ────
+export const BOOKING_CONNECTION = {
+  provider: 'Calendly',
+  status: 'connected',
+  calendar: 'Tom Hartley — Renewal reviews',
+} as const;

@@ -6,7 +6,9 @@ import type {
   ApproveResult,
   AuditRow,
   BookRow,
+  CallListRow,
   CampaignRow,
+  ConnectionRow,
   Contact,
   ConversationBrief,
   EnrollResult,
@@ -17,8 +19,10 @@ import type {
   OutcomeRow,
   QueueItem,
   SearchHit,
+  Suggestion,
   ThreadBrief,
   ThreadDetail,
+  ToneProfile,
 } from './types.ts';
 
 export interface DataClient {
@@ -43,8 +47,24 @@ export interface DataClient {
   thread(conversationId: string): Promise<ThreadDetail>;
   approve(conversationId: string, messageId: string): Promise<ApproveResult>;
   edit(conversationId: string, messageId: string, body: string): Promise<void>;
+  // Messages-first thread (v4): the per-conversation Agent ON/OFF switch. A human
+  // message never disables the agent; only this toggle does. takeover() is now a
+  // thin alias for setAgentEnabled(false), kept for compatibility.
+  setAgentEnabled(conversationId: string, enabled: boolean): Promise<void>;
   takeover(conversationId: string): Promise<void>;
+  // The agent's next-best message for the composer's suggestion slot (v4). null
+  // when the honest move is silence (opted out / a nudge would be pushy).
+  suggestion(conversationId: string): Promise<Suggestion | null>;
   simulateInbound(conversationId: string, text: string): Promise<InboundResult>;
+
+  // Operations (round 7) — missed-call text-back, human follow-up, documents.
+  // A missed call on the messaging-only line arrives via a voice-capture
+  // forward; the text-back is auto-sent (inquiry basis) but still passes the
+  // gate. sendManual is a human-controlled outbound, gated the same way (fail-
+  // closed). requestDocument sends a gated ask, then simulates a media reply.
+  simulateMissedCall(): Promise<{ conversationId: string }>;
+  sendManual(conversationId: string, body: string): Promise<{ ok: boolean; blockedReason?: string }>;
+  requestDocument(conversationId: string, docType: string): Promise<void>;
 
   // Command channel / tools
   queryBook(kind: 'renewals' | 'lapsed'): Promise<BookRow[]>;
@@ -64,6 +84,16 @@ export interface DataClient {
   agents(): Promise<LineAgent[]>;
   auditSample(): Promise<AuditRow[]>;
   optOuts(): Promise<Contact[]>;
+
+  // Producer worklist + tuning / scheduling read-models (round 7).
+  callList(): Promise<CallListRow[]>;
+  toneProfile(): Promise<ToneProfile>;
+  bookingConnection(): Promise<{ provider: string; status: 'connected'; calendar: string }>;
+
+  // The Connections surface (Trust & Settings): the five wires the agency
+  // connects, each with status + what it powers + the detail it provides.
+  // Composed from existing fixtures so the grid reads in one call.
+  connections(): Promise<ConnectionRow[]>;
 }
 
 // Wave-1 note: HttpClient implements the full DataClient (routes exist for the

@@ -1,15 +1,21 @@
 // Thread pane — day-grouped bubbles. Inbound left on --surface-2, outbound right
 // on --accent-soft with ink text at 15px. Outbound bubbles carry a ChannelBadge
-// + delivery status. System events (routed-to-human, holds, blocks, takeover,
-// opt-out) render as centered hairline timeline entries with GateReason where
-// applicable — never bubbles. Auto-scrolls to newest on load/change.
+// + delivery status. System events (routed-to-human, holds, blocks, opt-out)
+// render as centered hairline timeline entries with GateReason where applicable —
+// never bubbles. Auto-scrolls to newest on load/change.
+//
+// Messages-first v4: the bottom anchor is the Composer (always available unless
+// opted out) with the agent's next-best SuggestionSlot above it. A quiet Agent
+// ON/OFF switch lives in the header. No DraftCard, no Take over, no consent strip.
 
 import { useEffect, useRef } from 'react';
 import { Avatar, ChannelBadge, GateReason, StatusPill, Skeleton } from '../../components/index.ts';
 import type { BadgeChannel } from '../../components/index.ts';
-import type { ApproveResult, ThreadDetail, ThreadMessage } from '../../data/types.ts';
+import type { ApproveResult, Suggestion, ThreadDetail, ThreadMessage } from '../../data/types.ts';
 import { useClient } from '../../shell/ClientContext.tsx';
-import DraftCard from './DraftCard.tsx';
+import AgentToggle from './AgentToggle.tsx';
+import Composer, { type ComposerHandle } from './Composer.tsx';
+import SuggestionSlot from './SuggestionSlot.tsx';
 import { SparkleIcon } from './icons.tsx';
 import {
   blockedReason,
@@ -29,15 +35,18 @@ export type TypingState = { who: 'customer' | 'agent' } | null;
 export interface ThreadPaneProps {
   detail: ThreadDetail | undefined;
   loading: boolean;
-  pendingDraft: ThreadMessage | undefined;
-  playbookLabel: string;
+  // The agent's next-best message for the suggestion slot (null = silence).
+  suggestion: Suggestion | null;
   // Live typing indicator for the selected conversation (from the event feed).
   typing: TypingState;
   // Whether sending is globally active (kill switch off) — gates the "Live" dot.
   sendingActive: boolean;
   onApprove: (draftId: string) => Promise<ApproveResult>;
-  onEdit: (draftId: string, body: string) => Promise<void>;
-  onTakeover: () => Promise<void>;
+  // Send a free-text message as the business (sendManual). Resolves false if the
+  // gate blocked it.
+  onSend: (body: string) => Promise<boolean>;
+  // Flip the per-conversation Agent ON/OFF switch.
+  onToggleAgent: (enabled: boolean) => Promise<void>;
   // Opens the context sheet — the button is CSS-hidden above 1100px, where the
   // rail is docked in the grid instead.
   onOpenContext: () => void;
@@ -76,8 +85,7 @@ function SystemEntry({ message }: { message: ThreadMessage }) {
       </div>
     );
   }
-  // Opt-out / opt-back-in — a single calm centered entry (no duplicates, no
-  // footer): the timeline carries exactly one of each per state change.
+  // Opt-out / opt-back-in / missed-call — a single calm centered entry.
   const consentLabel = systemEventLabel(message);
   if (consentLabel !== null) {
     return (
@@ -98,23 +106,12 @@ function SystemEntry({ message }: { message: ThreadMessage }) {
       </div>
     );
   }
-  if (message.status === 'held') {
-    return (
-      <div className={styles.systemEntry}>
-        <div className={styles.systemInner}>
-          <span className={styles.systemLabel}>You took over</span>
-          <span>· the agent stood down; this thread is yours</span>
-        </div>
-      </div>
-    );
-  }
   return null;
 }
 
-// The live typing-indicator bubble. Customer types on the left (inbound style,
-// --surface-2); the agent types on the right (outbound style, --accent-soft)
-// with a tiny "Agent · drafting" caption. Three dots pulse on a staggered
-// keyframe (disabled under prefers-reduced-motion via the global reset).
+// The live typing-indicator bubble. Customer types on the left (inbound style);
+// the agent types on the right (outbound style) with a tiny "Agent · drafting"
+// caption. Dots pulse (disabled under prefers-reduced-motion via the reset).
 function TypingBubble({ who }: { who: 'customer' | 'agent' }) {
   const isAgent = who === 'agent';
   return (
@@ -141,15 +138,65 @@ function TypingBubble({ who }: { who: 'customer' | 'agent' }) {
   );
 }
 
+// Format a byte count as a compact "1.2 MB" / "284 KB" size label.
+function fileSize(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1_000) return `${Math.round(bytes / 1_000)} KB`;
+  return `${bytes} B`;
+}
+
+// A photo mime (heic/jpeg/png) gets a photo glyph; everything else a doc glyph.
+function isImageMime(mime: string): boolean {
+  return mime.startsWith('image/');
+}
+
+const DocGlyph = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 2h5l3 3v9H4z" />
+    <path d="M9 2v3h3" />
+  </svg>
+);
+
+const PhotoGlyph = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
+    <circle cx="6" cy="6.5" r="1.1" />
+    <path d="M3 12l3.5-3.5 2.5 2.5 2-2 2 2" />
+  </svg>
+);
+
+// An inbound media part rendered as an attachment chip inside the bubble group.
+function AttachmentChip({ filename, mime, bytes }: { filename: string; mime: string; bytes: number }) {
+  const isImage = isImageMime(mime);
+  return (
+    <div className={styles.attachmentChip}>
+      <span className={styles.attachmentGlyph}>{isImage ? PhotoGlyph : DocGlyph}</span>
+      <span className={styles.attachmentMeta}>
+        <span className={styles.attachmentName}>{filename}</span>
+        <span className={styles.attachmentSize}>{fileSize(bytes)}</span>
+      </span>
+    </div>
+  );
+}
+
 function Bubble({ message }: { message: ThreadMessage }) {
   const outbound = message.direction === 'outbound';
   const channel = message.channel_accepted;
+  const media = (message.parts ?? []).filter((p) => p.type === 'media');
   return (
     <div className={`${styles.bubbleRow} ${outbound ? styles.outbound : styles.inbound}`}>
       <div className={styles.bubbleGroup}>
         <div className={`${styles.bubble} ${outbound ? styles.bubbleOut : styles.bubbleIn}`}>
           {message.body}
         </div>
+        {media.map((p, i) => (
+          <AttachmentChip
+            key={`${p.filename}-${i}`}
+            filename={p.filename}
+            mime={p.mime_type}
+            bytes={p.size_bytes}
+          />
+        ))}
         <div className={`${styles.bubbleMeta} ${outbound ? '' : styles.inMeta}`}>
           {outbound && channel !== null && (
             <ChannelBadge channel={channel as BadgeChannel} />
@@ -183,28 +230,28 @@ function ThreadSkeleton() {
 export default function ThreadPane({
   detail,
   loading,
-  pendingDraft,
-  playbookLabel,
+  suggestion,
   typing,
   sendingActive,
   onApprove,
-  onEdit,
-  onTakeover,
+  onSend,
+  onToggleAgent,
   onOpenContext,
   onOpenBrief,
   onBack,
 }: ThreadPaneProps) {
   const client = useClient();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<ComposerHandle>(null);
   const conversationId = detail?.conversation.id;
   const messageCount = detail?.messages.length ?? 0;
 
   // Auto-scroll to newest on load/change (new conversation, new message, new
-  // draft — and when the typing indicator appears, so it stays pinned).
+  // suggestion — and when the typing indicator appears, so it stays pinned).
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [conversationId, messageCount, pendingDraft?.id, pendingDraft?.body, typing?.who]);
+  }, [conversationId, messageCount, suggestion?.body, typing?.who]);
 
   if (loading || detail === undefined) {
     return (
@@ -232,14 +279,13 @@ export default function ThreadPane({
 
   const { conversation, messages } = detail;
 
-  // Bubbles = non-system, non-pending-draft messages. The pending draft renders
-  // in the DraftCard, not as a bubble. Group the rest by day.
-  const timeline = messages.filter((m) => m.id !== pendingDraft?.id);
+  // Bubbles = all non-system messages. Held drafts (awaiting_approval) no longer
+  // render as bubbles — the suggestion slot carries them; filter them out.
+  const timeline = messages.filter((m) => m.status !== 'awaiting_approval');
 
-  // The quiet "Live" presence signal: shown only when the thread is
-  // agent-controlled, not opted out, and sending is globally active.
-  const showLive =
-    conversation.controller === 'agent' && !detail.optedOut && sendingActive;
+  // The quiet "Live" presence signal: shown only when the agent is ON, the
+  // thread isn't opted out, and sending is globally active.
+  const showLive = conversation.agent_enabled && !detail.optedOut && sendingActive;
 
   const firstName = firstNameOf(conversation.display_name);
 
@@ -270,15 +316,19 @@ export default function ThreadPane({
             Live
           </span>
         )}
-        <span className={styles.threadHeadPill}>
-          {detail.optedOut ? (
+        {/* Opted-out is real state → keep its pill; otherwise the Agent switch is
+            the only header status (no "Agent handling" / "You have this thread"). */}
+        {detail.optedOut ? (
+          <span className={styles.threadHeadPill}>
             <StatusPill tone="block">Opted out</StatusPill>
-          ) : conversation.controller === 'human' ? (
-            <StatusPill tone="info">You have this thread</StatusPill>
-          ) : (
-            <StatusPill tone="neutral">Agent handling</StatusPill>
-          )}
-        </span>
+          </span>
+        ) : (
+          <AgentToggle
+            key={conversation.id}
+            enabled={conversation.agent_enabled}
+            onToggle={onToggleAgent}
+          />
+        )}
         <button
           type="button"
           className={styles.briefButton}
@@ -326,9 +376,8 @@ export default function ThreadPane({
         )}
       </div>
 
-      {/* The draft card (when a reply awaits approval) OR, when opted out, a
-          single quiet hairline banner explaining the compliance boundary — no
-          business-side re-enable button (the boundary IS the product). */}
+      {/* Bottom anchor: opted out → the quiet compliance banner INSTEAD of the
+          composer; otherwise the suggestion slot (above) + the composer. */}
       {detail.optedOut ? (
         <div className={styles.optOutBanner}>
           <span className={styles.optOutText}>
@@ -338,21 +387,14 @@ export default function ThreadPane({
           </span>
         </div>
       ) : (
-        pendingDraft !== undefined && (
-          <div className={styles.animateIn}>
-            <DraftCard
-              draftId={pendingDraft.id}
-              body={pendingDraft.body}
-              playbookLabel={playbookLabel}
-              consents={detail.consents.map((c) => c.scope)}
-              timezone={conversation.timezone}
-              optedOut={detail.optedOut}
-              onApprove={onApprove}
-              onEdit={onEdit}
-              onTakeover={onTakeover}
-            />
-          </div>
-        )
+        <div className={styles.composerDock}>
+          <SuggestionSlot
+            suggestion={suggestion}
+            onApprove={onApprove}
+            onUse={(body) => composerRef.current?.loadDraft(body)}
+          />
+          <Composer ref={composerRef} firstName={firstName} onSend={onSend} />
+        </div>
       )}
     </section>
   );

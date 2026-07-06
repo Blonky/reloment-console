@@ -74,6 +74,100 @@
   letter-spacing: 0.02em;
 }
 
+/* ── connections (one coherent surface: the five wires the agency connects) ── */
+.connGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Cell dividers drawn with borders so the grid reads as one tight table. */
+.connRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+/* Top row has no top border; first column has no left border. */
+.connRow:nth-child(1),
+.connRow:nth-child(2) {
+  border-top: none;
+}
+.connRow:nth-child(odd) {
+  border-left: none;
+}
+
+@media (max-width: 768px) {
+  .connGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .connRow {
+    border-left: none;
+  }
+  .connRow:nth-child(1) {
+    border-top: none;
+  }
+  .connRow:nth-child(2) {
+    border-top: 1px solid var(--line);
+  }
+}
+
+.connHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.connTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.connStatus,
+.connStatusAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.connStatusAction {
+  color: var(--hold);
+}
+
+.connDot,
+.connDotAction {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--ok);
+}
+
+.connDotAction {
+  background: var(--hold);
+}
+
+.connDetail {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.connPowers {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
 /* ── data & compliance ───────────────────────────────────────── */
 .compliance {
   margin: 0;
