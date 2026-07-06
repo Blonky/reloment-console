@@ -10,7 +10,7 @@
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 280px;
   height: calc(100vh - var(--topbar-h));
-  margin: -32px;
+  margin: -40px;
   background: var(--surface);
   border-top: 1px solid var(--line);
 }

@@ -4,7 +4,7 @@
   font-size: 11px;
   font-weight: 550;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   line-height: 1.5;
   white-space: nowrap;
 }

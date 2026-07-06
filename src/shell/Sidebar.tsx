@@ -102,10 +102,12 @@ export default function Sidebar() {
         ))}
       </div>
       <div className={styles.footer}>
-        <Avatar name={TENANT} size="sm" />
         <div className={styles.tenant}>
-          <span className={styles.tenantName}>{TENANT}</span>
-          <span className={styles.tenantMeta}>Demo tenant</span>
+          <Avatar name={TENANT} size="sm" />
+          <div className={styles.tenantText}>
+            <span className={styles.tenantName}>{TENANT}</span>
+            <span className={styles.tenantMeta}>Demo tenant</span>
+          </div>
         </div>
       </div>
     </nav>

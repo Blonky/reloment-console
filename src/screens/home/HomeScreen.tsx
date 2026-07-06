@@ -1,12 +1,17 @@
-// Home — the command channel. "Command a governed fleet in plain language."
+// Home — the command surface (Sauna-pattern, v2; DESIGN.md §5).
 //
-// A full-height two-column cockpit (DESIGN.md §5): the command channel is the
-// hero (left, full height — head / transcript / composer), and a quiet pulse
-// rail sits to its right (four compact tiles + derived signals). The channel
-// routes plain-language intents through a deterministic parser (parseIntent) to
-// governed DataClient tool calls, rendering each result as a card in the
-// transcript. After enroll and kill-switch actions the pulse refetches live —
-// the pulse reacting to a command is the demo moment.
+// A CENTERED command surface, not a dashboard grid. One scrollable centered
+// column on paper. Two states:
+//   idle   — greeting (Fraunces, data-led) → 720px composer card → 980px
+//            analytics band (4 stat cards + Signals) → honesty footer.
+//   active — greeting collapses; the transcript takes the centered column, the
+//            composer docks sticky at the viewport bottom, and the analytics
+//            band tucks below the transcript (still live-updating).
+//
+// The page scrolls as a document (the shell's <main> scrolls). Behavior is
+// unchanged from v1: parseIntent router, every reply card, the thinking row,
+// the kill-switch typed-confirm card, aria-live, pulse refetch after mutations,
+// Enter submits / Shift+Enter newline, chips submit.
 
 import {
   useCallback,
@@ -17,8 +22,7 @@ import {
 } from 'react';
 import { useClient, useKillSwitch } from '../../shell/ClientContext.tsx';
 import { useData } from '../../data/useData.ts';
-import type { Contact } from '../../data/types.ts';
-import { Button } from '../../components/index.ts';
+import type { Contact, HomePulse } from '../../data/types.ts';
 import styles from './HomeScreen.module.css';
 import { parseIntent } from './parseIntent.ts';
 import type { Intent } from './parseIntent.ts';
@@ -33,8 +37,7 @@ import {
 import KillSwitchCard from './KillSwitchCard.tsx';
 import type { KillSwitchMode } from './KillSwitchCard.tsx';
 import {
-  PulseTiles,
-  SignalsCard,
+  AnalyticsBand,
   deriveSignals,
 } from './PulseRow.tsx';
 import { IconSend } from './icons.tsx';
@@ -42,12 +45,55 @@ import { IconSend } from './icons.tsx';
 // ── Transcript model ──────────────────────────────────────────────────────────
 type Turn =
   | { id: number; role: 'user'; text: string }
-  | { id: number; role: 'welcome' }
   | { id: number; role: 'thinking'; label: string }
   | { id: number; role: 'reply'; node: React.ReactNode };
 
-// Suggestion chips at the composer foot (a curated slice of the catalogue).
+// Suggestion chips inside the composer footer (a curated slice of the catalogue).
 const SUGGESTIONS = ['Show renewals', 'Enroll win-back', 'Campaign status', 'Brief me on Dana'];
+
+// ── Greeting — deterministic per the DataClient clock, derived from live pulse.
+// Time-of-day comes from client.now() (never Date.now()); the sentence is
+// composed from real pulse data so the surface reads back what the fleet is
+// actually doing.
+function dollars(cents: number): string {
+  return `$${(cents / 100).toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
+}
+
+function timeOfDay(nowMs: number): 'morning' | 'afternoon' | 'evening' {
+  const hour = new Date(nowMs).getHours();
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  return 'evening';
+}
+
+function greetingLine(pulse: HomePulse | undefined, nowMs: number): string {
+  const part = timeOfDay(nowMs);
+  const salutation =
+    part === 'morning' ? 'Morning.' : part === 'afternoon' ? 'Good afternoon.' : 'Good evening.';
+  if (!pulse) return salutation;
+
+  const needs = pulse.needsYourEyes;
+  const running = pulse.conversationsRunning;
+
+  // Something needs the operator → lead with it (the hero action).
+  if (needs > 0) {
+    return `${salutation} ${needs} ${needs === 1 ? 'conversation needs' : 'conversations need'} your eyes.`;
+  }
+  // Nothing pending but the fleet is holding threads → calm "all quiet".
+  if (running > 0) {
+    return `All quiet. The fleet is holding ${running} ${
+      running === 1 ? 'conversation' : 'conversations'
+    }.`;
+  }
+  // Nothing running at all → fall back to recovered revenue if any, else calm.
+  if (pulse.wonBackCents > 0) {
+    return `All quiet. ${dollars(pulse.wonBackCents)} recovered so far.`;
+  }
+  return `All quiet. Nothing needs you right now.`;
+}
 
 // The thinking-row label per intent — honest about which read is running.
 function thinkingLabel(intent: Intent): string {
@@ -106,22 +152,29 @@ export default function HomeScreen() {
     [book.data, contacts, lapsed],
   );
 
+  // Deterministic greeting from the client clock + live pulse.
+  const greeting = useMemo(
+    () => greetingLine(pulse.data, client.now()),
+    [pulse.data, client],
+  );
+
   // Transcript state.
   const seqRef = useRef(0);
   const nextId = () => (seqRef.current += 1);
-  const [turns, setTurns] = useState<Turn[]>(() => [
-    { id: 0, role: 'welcome' },
-  ]);
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const transcriptRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const lastTurnRef = useRef<HTMLDivElement>(null);
 
-  // Keep the transcript pinned to the latest turn.
+  const active = turns.length > 0;
+
+  // Keep the newest turn in view — scroll the shell's document, not a nested box.
   useEffect(() => {
-    const el = transcriptRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (turns.length > 0) {
+      lastTurnRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    }
   }, [turns]);
 
   // Replace the trailing thinking row with a reply node.
@@ -260,49 +313,105 @@ export default function HomeScreen() {
     const el = e.currentTarget;
     setInput(el.value);
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   };
 
-  const paused = pulse.data?.killSwitch ?? false;
+  // The composer — one node, reused idle (centered) and active (sticky dock).
+  const composer = (
+    <div className={styles.composerCard}>
+      <textarea
+        ref={inputRef}
+        className={styles.input}
+        value={input}
+        onInput={onInput}
+        onChange={() => {
+          /* controlled via onInput to co-manage auto-grow */
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            void submit(input);
+          }
+        }}
+        placeholder="Command the fleet — e.g. “show renewals”, “enroll win-back”, “brief me on Dana”"
+        rows={active ? 1 : 3}
+        aria-label="Command input"
+        spellCheck={false}
+      />
+      <div className={styles.composerFoot}>
+        <div className={styles.suggestions}>
+          {SUGGESTIONS.map((s) => (
+            <button
+              type="button"
+              className={styles.chip}
+              key={s}
+              onClick={() => void submit(s)}
+              disabled={busy}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className={styles.sendBtn}
+          onClick={() => void submit(input)}
+          disabled={busy || input.trim().length === 0}
+          aria-label="Send command"
+        >
+          <IconSend size={16} />
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className={styles.page}>
-      {/* Command channel — the hero, full-height left column */}
-      <section className={styles.channel} aria-label="Command channel">
-        <div className={styles.channelHead}>
-          <span className={styles.channelTitle}>
-            <span
-              className={`${styles.channelTitleDot} ${
-                paused ? styles.channelTitleDotPaused : ''
-              }`}
-            />
-            Command channel
-          </span>
-          <span className={styles.channelSub}>
-            {paused
-              ? 'All sending paused — resume to let the agents send'
-              : 'Deterministic router · governed tools'}
-          </span>
-        </div>
+      {!active && (
+        <>
+          <div className={styles.greetSpacer} />
+          <header className={styles.greetBlock}>
+            <h1 className={styles.greeting}>{greeting}</h1>
+            <p className={styles.subline}>
+              Every command runs the governed send gate — replies show exactly
+              who was excluded, and why.
+            </p>
+          </header>
+        </>
+      )}
 
+      {/* Idle: composer centered at the top. Active: composer is rendered
+          separately as a sticky dock below, so here it only appears when idle. */}
+      {!active && <div className={styles.composerSlotIdle}>{composer}</div>}
+
+      {/* Transcript — only in the active state; owns the centered column. */}
+      {active && (
         <div
           className={styles.transcript}
-          ref={transcriptRef}
           aria-live="polite"
           aria-label="Command transcript"
         >
-          <div className={styles.transcriptInner}>
-          {turns.map((t) => {
+          {turns.map((t, i) => {
+            const isLast = i === turns.length - 1;
+            const refProp = isLast ? { ref: lastTurnRef } : {};
             if (t.role === 'user') {
               return (
-                <div className={`${styles.turn} ${styles.turnUser}`} key={t.id}>
+                <div
+                  className={`${styles.turn} ${styles.turnUser}`}
+                  key={t.id}
+                  {...refProp}
+                >
                   <div className={styles.userBubble}>{t.text}</div>
                 </div>
               );
             }
             if (t.role === 'thinking') {
               return (
-                <div className={`${styles.turn} ${styles.turnSystem}`} key={t.id}>
+                <div
+                  className={`${styles.turn} ${styles.turnSystem}`}
+                  key={t.id}
+                  {...refProp}
+                >
                   <div className={styles.thinking}>
                     <span className={styles.thinkingDots}>
                       <span />
@@ -314,93 +423,40 @@ export default function HomeScreen() {
                 </div>
               );
             }
-            if (t.role === 'welcome') {
-              return (
-                <div className={`${styles.turn} ${styles.turnSystem}`} key={t.id}>
-                  <div className={styles.welcome}>
-                    <p className={styles.welcomeLede}>
-                      This is your command channel. Tell the fleet what to do in
-                      plain language — pull the book, enroll a campaign, brief
-                      yourself on a contact, or pause everything. Every action runs
-                      through the same governed send gate, and the reply shows you
-                      exactly what it did, including who it excluded and why.
-                    </p>
-                    <p className={styles.welcomeHint}>
-                      Deterministic router today — the language-model planner ships
-                      with the platform connection.
-                    </p>
-                  </div>
-                </div>
-              );
-            }
             // reply
             return (
-              <div className={`${styles.turn} ${styles.turnSystem}`} key={t.id}>
+              <div
+                className={`${styles.turn} ${styles.turnSystem}`}
+                key={t.id}
+                {...refProp}
+              >
                 <div className={styles.systemWrap}>{t.node}</div>
               </div>
             );
           })}
-          </div>
         </div>
+      )}
 
-        {/* Composer */}
-        <div className={styles.composer}>
-          <div className={styles.suggestions}>
-            {SUGGESTIONS.map((s) => (
-              <button
-                type="button"
-                className={styles.chip}
-                key={s}
-                onClick={() => void submit(s)}
-                disabled={busy}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-          <div className={styles.composerRow}>
-            <textarea
-              ref={inputRef}
-              className={styles.input}
-              value={input}
-              onInput={onInput}
-              onChange={() => {
-                /* controlled via onInput to co-manage auto-grow */
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  void submit(input);
-                }
-              }}
-              placeholder="Command the fleet — e.g. “show renewals”, “enroll win-back”, “brief me on Dana”"
-              rows={1}
-              aria-label="Command input"
-              spellCheck={false}
-            />
-            <Button
-              variant="primary"
-              className={styles.sendBtn}
-              onClick={() => void submit(input)}
-              disabled={busy || input.trim().length === 0}
-              aria-label="Send command"
-            >
-              <IconSend size={15} />
-              Send
-            </Button>
-          </div>
-        </div>
-      </section>
+      {/* Sticky composer dock — active state only. */}
+      {active && <div className={styles.composerDock}>{composer}</div>}
 
-      {/* Pulse rail — quiet metrics + derived signals, right column */}
-      <aside className={styles.rail} aria-label="Pulse">
-        <PulseTiles pulse={pulse.data} />
-        <SignalsCard
+      {/* Analytics band — idle: below the composer; active: below the
+          transcript. Same component, still live-updating either way. */}
+      <div className={active ? styles.bandActive : styles.bandIdle}>
+        <AnalyticsBand
+          pulse={pulse.data}
           signals={signals}
-          loading={book.loading}
+          signalsLoading={book.loading}
           onRun={(cmd) => void submit(cmd)}
         />
-      </aside>
+      </div>
+
+      {!active && (
+        <p className={styles.honesty}>
+          Deterministic router today — the language-model planner ships with the
+          platform connection.
+        </p>
+      )}
     </div>
   );
 }

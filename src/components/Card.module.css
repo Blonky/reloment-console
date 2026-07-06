@@ -1,8 +1,21 @@
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
   overflow: hidden;
+}
+
+/* Interactive cards lift on hover (only where hover semantics already exist). */
+.interactive {
+  transition:
+    box-shadow var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.interactive:hover {
+  box-shadow: var(--shadow-float);
+  transform: translateY(-1px);
 }
 
 .header {
@@ -10,7 +23,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -28,7 +41,7 @@
 }
 
 .body {
-  padding: 16px;
+  padding: 20px;
 }
 
 .bodyFlush {

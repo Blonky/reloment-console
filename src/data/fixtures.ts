@@ -360,20 +360,8 @@ export const OUTCOMES: FixtureOutcome[] = [
   },
 ];
 
-// Monthly recovered totals for the Insights bars, DERIVED from the outcome
-// ledger (monthOffset back from DEMO_NOW, whose month is the last label) so
-// the chart can never disagree with the hero number. Zero months stay zero —
-// the product counts nothing it can't prove.
-const MONTH_LABELS = ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
-export const RECOVERED_BY_MONTH: { label: string; cents: number }[] = MONTH_LABELS.map(
-  (label, i) => ({
-    label,
-    cents: OUTCOMES.filter((o) => o.monthOffset === MONTH_LABELS.length - 1 - i).reduce(
-      (s, o) => s + o.amount_cents,
-      0,
-    ),
-  }),
-);
+// (The Insights month series is derived in-screen from OutcomeRow.month —
+// outcomes are the single source of truth; no separate month fixture exists.)
 
 // ── Home pulse (seed-derived, matches the platform's /api/home) ─────────────
 // needsYourEyes = Dana (awaiting_approval) + Marcus (routed_to_human) = 2

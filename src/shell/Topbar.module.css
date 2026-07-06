@@ -6,8 +6,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
-  border-bottom: 1px solid var(--line);
+  padding: 0 40px;
+  /* No full-width border — the topbar blends with the paper (§4). */
   background: var(--bg);
 }
 
@@ -20,14 +20,20 @@
 .right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
+/* Status dot as a compact white pill (§4). */
 .sending {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 5px 11px;
+  background: var(--surface);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-soft);
   font-size: 12px;
+  font-weight: 500;
   color: var(--ink-2);
 }
 
@@ -39,10 +45,11 @@
   flex: none;
 }
 
-/* Paused (kill-switch on) band */
+/* Paused (kill-switch on) band — unchanged red band behavior. */
 .paused {
   background: var(--block);
   border-bottom-color: var(--block);
+  padding: 0 40px;
 }
 
 .pausedTitle {

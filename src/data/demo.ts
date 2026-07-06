@@ -492,14 +492,19 @@ export class DemoClient implements DataClient {
       cross_sell: 'Win back lapsed quotes',
     };
     return delay(
-      OUTCOMES.map((o) => ({
-        contact: contactById(o.contactId)?.name ?? o.contactId,
-        playbook: playbookFor[o.kind] ?? '—',
-        kind: o.kind,
-        outcome: label[o.kind] ?? o.kind,
-        amount_cents: o.amount_cents,
-        note: o.note,
-      })),
+      OUTCOMES.map((o) => {
+        const d = new Date(DEMO_NOW.getTime());
+        d.setUTCMonth(d.getUTCMonth() - o.monthOffset);
+        return {
+          contact: contactById(o.contactId)?.name ?? o.contactId,
+          playbook: playbookFor[o.kind] ?? '—',
+          kind: o.kind,
+          outcome: label[o.kind] ?? o.kind,
+          amount_cents: o.amount_cents,
+          note: o.note,
+          month: d.toISOString().slice(0, 7),
+        };
+      }),
     );
   }
 

@@ -4,12 +4,13 @@
   justify-content: center;
   gap: 6px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   font-weight: 550;
   white-space: nowrap;
   transition:
     background var(--dur) var(--ease),
     border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
     color var(--dur) var(--ease);
 }
 
@@ -35,6 +36,8 @@
 .primary {
   background: var(--accent);
   color: var(--accent-ink);
+  /* subtle inner top-light (§4) */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 .primary:not(:disabled):hover {
   background: #0c4a3b;
@@ -42,11 +45,13 @@
 
 .secondary {
   background: var(--surface);
-  border-color: var(--line);
+  border-color: var(--line-strong);
   color: var(--ink);
+  box-shadow: var(--shadow-soft);
 }
 .secondary:not(:disabled):hover {
-  background: var(--surface-2);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
 }
 
 .ghost {

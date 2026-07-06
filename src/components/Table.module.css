@@ -41,5 +41,5 @@
 }
 
 .clickable:hover {
-  background: var(--surface-2);
+  background: rgba(28, 27, 23, 0.03);
 }

@@ -19,19 +19,29 @@ import RecoveredChart from './RecoveredChart.tsx';
 import type { MonthPoint } from './RecoveredChart.tsx';
 import styles from './InsightsScreen.module.css';
 
-// Canonical pilot ramp (mirrors the fixture RECOVERED_BY_MONTH). The most-recent
-// month's figure ($4,120) is the causally-attributed total shown in the hero.
-const RECOVERED_BY_MONTH: MonthPoint[] = [
-  { label: 'Feb', cents: 0 },
-  { label: 'Mar', cents: 0 },
-  { label: 'Apr', cents: 89000 },
-  { label: 'May', cents: 0 },
-  { label: 'Jun', cents: 412000 },
-  { label: 'Jul', cents: 0 },
-];
+// The chart is DERIVED from the outcome ledger (single source of truth): the
+// last six months ending at the client clock's month, each bar the sum of that
+// month's attributed outcomes. It can never disagree with the hero or ledger.
+function deriveSeries(rows: OutcomeRow[], now: number): MonthPoint[] {
+  const byMonth = new Map<string, number>();
+  for (const r of rows) byMonth.set(r.month, (byMonth.get(r.month) ?? 0) + r.amount_cents);
+  const points: MonthPoint[] = [];
+  for (let back = 5; back >= 0; back -= 1) {
+    const d = new Date(now);
+    d.setUTCMonth(d.getUTCMonth() - back);
+    const iso = d.toISOString().slice(0, 7);
+    points.push({
+      label: d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }),
+      cents: byMonth.get(iso) ?? 0,
+    });
+  }
+  return points;
+}
 
-// Outcomes lack a date field; supply a stable, deterministic month per row.
-const OUTCOME_MONTH = 'Jun 2026';
+function monthLabel(iso: string): string {
+  const d = new Date(`${iso}-15T00:00:00Z`);
+  return d.toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
 
 function fullDollars(cents: number): string {
   return `$${Math.round(cents / 100).toLocaleString('en-US')}`;
@@ -59,14 +69,10 @@ function Hero({ pulse }: { pulse: HomePulse | undefined }) {
   );
 }
 
-function ChartCard({ loading }: { loading: boolean }) {
+function ChartCard({ loading, series }: { loading: boolean; series: MonthPoint[] }) {
   return (
     <Card title="Recovered by month">
-      {loading ? (
-        <Skeleton width="100%" height={200} />
-      ) : (
-        <RecoveredChart series={RECOVERED_BY_MONTH} />
-      )}
+      {loading ? <Skeleton width="100%" height={200} /> : <RecoveredChart series={series} />}
     </Card>
   );
 }
@@ -142,7 +148,7 @@ function Ledger({
                     <span className={styles.outcomeLabel}>{r.outcome}</span>
                   </span>
                 </TD>
-                <TD>{OUTCOME_MONTH}</TD>
+                <TD>{monthLabel(r.month)}</TD>
                 <TD num>{fullDollars(r.amount_cents)}</TD>
               </TR>
             );
@@ -181,7 +187,10 @@ export default function InsightsScreen() {
         </div>
       </Card>
 
-      <ChartCard loading={outcomes.loading || home.loading} />
+      <ChartCard
+        loading={outcomes.loading || home.loading}
+        series={deriveSeries(outcomes.data ?? [], client.now())}
+      />
 
       <Ledger
         loading={outcomes.loading}

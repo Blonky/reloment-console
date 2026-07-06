@@ -122,54 +122,73 @@ dependency budget matters in an open-source repo.
 - **ConsentChips**: every thread header shows consent scopes + quiet-hours
   window for that contact, always visible while composing/approving.
 
-## 4. Visual language
+## 4. Visual language — "quiet luxury" (v2)
 
-Deliberate, calm, credible — an underwriting desk, not a growth-hacking tool.
-No gradients-on-everything, no glassmorphism, no purple-SaaS default.
+Premium, warm, editorial — the reference class is Sauna's home surface, Wispr
+Flow's dashboard, and the calmer end of godly.website: generous whitespace,
+one serif display voice, paper warmth, soft floating cards. NOT enterprise-grid
+software, NOT purple-SaaS, NOT glassmorphism. Every surface should feel like it
+was set by a book designer, then wired by an engineer.
 
 ### Tokens (`theme.css`, CSS custom properties)
 
 ```
---bg:        #F6F5F1   warm paper app background
---surface:   #FFFFFF   cards
---surface-2: #EFEDE7   inset wells, code, timeline rails
---ink:       #16191D   primary text
---ink-2:     #5A626B   secondary text
---line:      #E3E0D8   hairline borders (borders > shadows)
---accent:    #0F5847   Reloment green — primary actions, active nav
---accent-ink:#FFFFFF
---accent-soft:#E9F1EE  selected/active backgrounds
---ok:        #1D7A3E   allow / sent / positive
---hold:      #9A5B12   holds, pending, quiet-hours (amber, not alarmist)
---block:     #A8342A   blocks, opt-outs (used sparingly, never shouting)
---info:      #2456A6   informational
---imessage:  #0B84FE   --rcs: #0E7490   --sms: #6B7280
---radius: 10px  --radius-sm: 6px
+--bg:         #F7F5F0   warm paper app background (whole app sits on this)
+--surface:    #FFFFFF   floating cards
+--surface-2:  #F0EDE6   inset wells, code, timeline rails
+--ink:        #1C1B17   warm near-black
+--ink-2:      #6E6B62   secondary text (warm gray)
+--line:       rgba(28,27,23,0.08)    default border
+--line-strong:rgba(28,27,23,0.16)    inputs, emphasized dividers
+--accent:     #0F5847   Reloment green — primary actions, active nav
+--accent-ink: #FFFFFF
+--accent-soft:#E9F1EC   selected/active backgrounds
+--ok: #1D7A3E  --hold: #9A5B12  --block: #A8342A  --info: #2456A6
+--imessage: #0B84FE  --rcs: #0E7490  --sms: #6B7280
+--radius-sm: 8px  --radius: 14px  --radius-lg: 18px  --radius-pill: 999px
+--shadow-soft:  0 1px 2px rgba(28,27,23,0.04), 0 8px 24px rgba(28,27,23,0.05)
+--shadow-float: 0 2px 6px rgba(28,27,23,0.05), 0 16px 40px rgba(28,27,23,0.09)
 ```
 
-Dark mode: not in this milestone (do not half-ship it).
+Shadows are now allowed — but ONLY these two layered ultra-soft recipes.
+Depth = paper vs white + soft shadow, never hard lines everywhere.
 
-### Type
+### Type — two voices
 
-- **Inter Variable**, self-hosted via `@fontsource-variable/inter` (no CDN).
-- Scale: 13px base UI / 15px reading (thread bubbles) / 20, 28, 40 display.
-  Display weights 600–650 with `letter-spacing:-0.02em`.
-- **All metrics use `font-variant-numeric: tabular-nums`.** Money is set in the
-  display scale — "recovered $4,120" is the product's one metric and gets
-  typographic star billing.
+- **UI voice:** Inter Variable (13px base, 15px reading), self-hosted.
+- **Display voice:** **Fraunces Variable** (`@fontsource-variable/fraunces`,
+  self-hosted — the ONE new dependency). Used ONLY for: the Home greeting,
+  stat-card numbers, the Insights recovered figure, and screen h1s. Settings:
+  weight 480–560, optical size high, `letter-spacing:-0.01em`. This serif is
+  what separates the product from office software — use it sparingly so it
+  stays special.
+- Metrics remain `font-variant-numeric: tabular-nums` where digits align in
+  columns (tables); big serif stat numbers may use default figures.
 
-### Layout & texture
+### Shell
 
-- Left sidebar 228px (nav + tenant), Topbar 56px, content `max-width: 1360px`,
-  page padding 32px, 8px spacing grid throughout.
-- Cards: `--surface`, 1px `--line` border, `--radius`, **no drop shadows**
-  except overlays/popovers. Depth comes from the paper-vs-white contrast.
-- Empty states teach: icon-less, a short sentence of *why* the state is empty
-  and the one action that fills it. No cartoon illustrations.
-- Loading: skeleton blocks (`--surface-2` shimmer), never spinners for content.
-- Motion: 120–160ms ease-out on hover/expand only. Nothing bounces.
-- Charts (Insights): hand-rolled inline SVG sparklines/bars in token colors.
-  No chart library.
+- **Sidebar (240px):** paper background (no border wall) — a quiet floating
+  column. Nav items are full pills (radius-pill): inactive = ink-2 text only;
+  hover = rgba ink 4% fill; active = **white pill + shadow-soft + ink text +
+  accent icon**. Wordmark in Fraunces. Tenant block bottom = compact white
+  pill card.
+- **Topbar:** no full-width border; it blends with the paper. Right side:
+  "Demo data" pill + status dot pill. Kill-switch band stays a full red band.
+- Content `max-width: 1360px`, page padding 40px, 8px grid.
+
+### Cards & surfaces
+
+- Default card: `--surface`, 1px `--line`, `--radius-lg`, `--shadow-soft`,
+  padding 20. Interactive cards hover to `--shadow-float` +
+  `translateY(-1px)` (160–200ms ease-out).
+- Buttons: primary = accent pill (radius-pill, subtle inner top-light);
+  secondary = white pill w/ `--line-strong`; ghost unchanged. Chips/suggestions
+  = white pills that lift on hover.
+- Inputs: `--line-strong` border, radius, focus = accent ring 2px + soft
+  accent glow (`0 0 0 4px var(--accent-soft)`).
+- Empty states teach; skeletons shimmer; charts stay hand-rolled SVG.
+- Motion: 160–200ms ease-out; transcript cards fade-slide in 6px. Nothing
+  bounces.
 
 ## 5. The two hero screens
 
@@ -197,25 +216,42 @@ Three-pane: **triage list (300px) | thread (flex) | context rail (280px)**.
   provenance), consent chips, and a demo-only "Simulate customer reply" input
   (with a STOP quick-chip) so the whole governed loop is demoable in-browser.
 
-### Home (`/`) — the command channel
+### Home (`/`) — the command surface (Sauna-pattern, v2)
 
-The Manus-style orchestration surface. The command channel is the HERO and owns
-the composition; metrics support it from a rail. Layout: a full-height
-two-column grid — `minmax(0, 1fr)` for the channel, `300px` for the rail — with
-no dead vertical space anywhere:
+A CENTERED command surface, not a dashboard grid. One scrollable centered
+column on paper; the page breathes. Two states:
 
-- **Command channel** (left, full height): head bar, transcript, composer.
-  When the transcript is short its content anchors to the BOTTOM (against the
-  composer), like every real messaging surface — never a card floating at the
-  top of a void.
-- **Pulse rail** (right): four compact MetricTiles stacked (fixed ~84px, label
-  one line, value on a shared baseline) then the Signals card. **Recovered** is
-  the one focal accent (ok-tone value, hairline accent treatment); everything
-  else stays quiet. The rail scrolls itself if it must; it never stretches the
-  page.
-- Suggestion chips live on the composer ONLY — the welcome message is prose
-  (plus the "deterministic router today" honesty line), so nothing on screen is
-  duplicated.
+**Idle state (no turns yet):**
+1. Vertical space (~12vh), then the **greeting** — Fraunces, ~42px, centered,
+   time-of-day aware and data-led with quiet personality. Compose from the
+   pulse, e.g.: morning → "Morning. 2 conversations need your eyes." /
+   afternoon-quiet → "All quiet. The fleet is holding 4 conversations." /
+   after a win → "Jordan came back. That's $4,120 recovered." Beneath it one
+   13px ink-2 subline: "Every command runs the governed send gate — replies
+   show exactly who was excluded, and why."
+2. The **composer card** (max-width 720px, centered): radius-lg,
+   shadow-float, a 15px multi-line input (3 rows), and inside the card's
+   footer row: suggestion pills left ("Show renewals", "Enroll win-back",
+   "Campaign status", "Brief me on Dana") + a circular accent send button
+   right. Focus ring per §4. This card is the centerpiece of the product.
+3. The **analytics band** (max-width 980px, centered, ~48px below): four stat
+   cards in a row — label (11px uppercase ink-2), **Fraunces ~30px value**,
+   12px sub. "Needs your eyes" links to Inbox (hover lift). **Recovered** =
+   value in --ok; it is the only colored number. Below the stat row, one wide
+   **Signals** card (the 2–3 derived signals with their quiet action links).
+4. Footer line, tiny, ink-2, centered: "Deterministic router today — the
+   language-model planner ships with the platform connection."
+
+**Active state (≥1 turn):** the greeting collapses away; the transcript takes
+the centered column (user turns right in accent-soft pills, replies as reply
+cards — unchanged behavior), the composer card docks pinned at the bottom of
+the viewport (sticky within the column, shadow-float lifting it off the page),
+and the analytics band tucks BELOW the transcript (still reachable by scroll —
+the numbers still live-update after enroll/kill commands). aria-live intact.
+
+No topbars-within-cards, no channel chrome ("Command channel" head bar is
+gone) — the surface IS the channel. The kill-switch red band stays in the
+shell topbar.
 - **Command channel** (main): a chat column where the operator types intents.
   This milestone ships a **deterministic command router** (no LLM key needed):
   pattern-match intents → DataClient tool calls → rich structured replies

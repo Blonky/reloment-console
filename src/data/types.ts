@@ -214,6 +214,7 @@ export interface OutcomeRow {
   outcome: string; // plain-English label
   amount_cents: number;
   note: string;
+  month: string; // ISO 'YYYY-MM' the outcome was attributed to
 }
 
 export interface LineAgent {

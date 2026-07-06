@@ -5,53 +5,58 @@
   top: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--line);
+  /* Paper column — no border wall. A quiet floating column (§4). */
   background: var(--bg);
-  padding: 16px 12px;
+  padding: 20px 14px 16px;
 }
 
 .wordmark {
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 520;
+  letter-spacing: -0.01em;
   color: var(--accent);
-  padding: 4px 8px 16px;
+  padding: 2px 12px 20px;
 }
 
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
+/* Nav items are full pills (§4). */
 .link {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 34px;
-  padding: 0 8px;
-  border-radius: var(--radius-sm);
+  gap: 11px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
   font-size: 13px;
   font-weight: 500;
   color: var(--ink-2);
   transition:
     background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
     color var(--dur) var(--ease);
 }
 
 .link:hover {
-  background: var(--surface-2);
+  background: rgba(28, 27, 23, 0.04);
   text-decoration: none;
   color: var(--ink);
 }
 
-.linkActive {
-  background: var(--accent-soft);
-  color: var(--accent);
+/* Active = white pill + shadow-soft + ink text + accent-colored icon. */
+.linkActive,
+.linkActive:hover {
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  color: var(--ink);
 }
 
-.linkActive:hover {
-  background: var(--accent-soft);
+.linkActive .icon {
   color: var(--accent);
 }
 
@@ -61,14 +66,21 @@
 
 .footer {
   margin-top: auto;
+  padding-top: 12px;
+}
+
+/* Tenant block = compact white pill card (§4). */
+.tenant {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 8px 4px;
-  border-top: 1px solid var(--line);
+  padding: 8px 10px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
 }
 
-.tenant {
+.tenantText {
   display: flex;
   flex-direction: column;
   min-width: 0;
