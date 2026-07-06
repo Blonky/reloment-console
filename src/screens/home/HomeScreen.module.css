@@ -1,0 +1,693 @@
+/* Home command channel — private styles. Tokens from theme.css only; hairline
+   borders over shadows; 8px grid; 120–160ms ease-out motion. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ── Pulse row ──────────────────────────────────────────────────────────── */
+.pulse {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr) 1.4fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 1080px) {
+  .pulse {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.tileCard {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+/* Signals card body */
+.signals {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.signalRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.signalDot {
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--hold);
+  flex: none;
+}
+
+.signalDotInfo {
+  background: var(--info);
+}
+
+.signalDotOk {
+  background: var(--ok);
+}
+
+.signalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.signalText {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.signalAction {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.signalAction:hover {
+  opacity: 0.72;
+  text-decoration: underline;
+}
+
+/* ── Command channel ────────────────────────────────────────────────────── */
+.channel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.channelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.channelTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.channelTitleDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-soft);
+}
+
+.channelTitleDotPaused {
+  background: var(--block);
+  box-shadow: 0 0 0 3px var(--block-soft);
+}
+
+.channelSub {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+/* Transcript scroll region */
+.transcript {
+  flex: 1;
+  min-height: 340px;
+  overflow-y: auto;
+  padding: 20px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.turn {
+  display: flex;
+  max-width: 100%;
+}
+
+.turnUser {
+  justify-content: flex-end;
+}
+
+.turnSystem {
+  justify-content: flex-start;
+}
+
+.userBubble {
+  max-width: 68%;
+  padding: 9px 13px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  border-radius: var(--radius);
+  border-top-right-radius: var(--radius-sm);
+  font-size: 14px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.systemWrap {
+  max-width: 92%;
+  width: 100%;
+}
+
+/* Thinking row */
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 13px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  border-top-left-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.thinkingDots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.thinkingDots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-2);
+  opacity: 0.5;
+  animation: home-pulse-dot 1s var(--ease) infinite;
+}
+
+.thinkingDots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.thinkingDots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes home-pulse-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.85;
+    transform: translateY(-2px);
+  }
+}
+
+/* ── Reply cards (shared) ───────────────────────────────────────────────── */
+.reply {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+  animation: home-card-in var(--dur) var(--ease);
+}
+
+@keyframes home-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.replyHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.replyHeadIcon {
+  color: var(--ink-2);
+  display: inline-flex;
+}
+
+.replyTitle {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-2);
+}
+
+.replyBody {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.replyLede {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.replyLedeStrong {
+  font-weight: 600;
+}
+
+.followUp {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.followUp a {
+  font-weight: 600;
+}
+
+/* Table wrapper so wide tables scroll, never the page */
+.tableScroll {
+  overflow-x: auto;
+  margin: 0 -14px;
+  padding: 0 14px;
+}
+
+.muted {
+  color: var(--ink-2);
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Enroll narration ───────────────────────────────────────────────────── */
+.enrollGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.enrollGroupLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+
+.enrollGroupCount {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.enrollList {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.enrollItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--surface);
+}
+
+.enrollItem + .enrollItem {
+  border-top: 1px solid var(--line);
+}
+
+.enrollItemExcluded {
+  background: var(--surface);
+}
+
+.enrollName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  flex: none;
+}
+
+.enrollDash {
+  color: var(--line);
+  flex: none;
+}
+
+.enrollReasonSpacer {
+  flex: 1;
+}
+
+.divider {
+  height: 1px;
+  background: var(--line);
+  border: none;
+  margin: 2px 0;
+}
+
+/* ── Brief card ─────────────────────────────────────────────────────────── */
+.briefTop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.briefIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.briefName {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.briefMeta {
+  font-size: 12px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.briefSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.briefSectionLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+
+.memoryList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memoryItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.memoryBullet {
+  width: 4px;
+  height: 4px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--ink-2);
+  flex: none;
+}
+
+.recentLine {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+
+.recentLine b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ── Search hits ────────────────────────────────────────────────────────── */
+.hitList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hit {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--dur) var(--ease);
+}
+
+.hit:hover {
+  background: var(--surface-2);
+  text-decoration: none;
+}
+
+.hitTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hitName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hitBody {
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+
+/* ── Kill-switch confirm card ───────────────────────────────────────────── */
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.confirmWord {
+  font-weight: 700;
+  color: var(--block);
+  font-variant-numeric: tabular-nums;
+}
+
+.confirmWordResume {
+  color: var(--ok);
+}
+
+.confirmRow {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.confirmInput {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 14px;
+  color: var(--ink);
+  transition: border-color var(--dur) var(--ease);
+}
+
+.confirmInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.confirmDone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.confirmDonePaused {
+  color: var(--block);
+}
+
+.confirmDoneResumed {
+  color: var(--ok);
+}
+
+/* ── Help card ──────────────────────────────────────────────────────────── */
+.helpList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.helpItem {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+}
+
+.helpItem + .helpItem {
+  border-top: 1px solid var(--line);
+}
+
+.helpBlurb {
+  font-size: 13px;
+  color: var(--ink-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+}
+
+.chipMono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Welcome card ───────────────────────────────────────────────────────── */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.welcomeLede {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.welcomeHint {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── Composer ───────────────────────────────────────────────────────────── */
+.composer {
+  border-top: 1px solid var(--line);
+  padding: 12px 16px 14px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.composerRow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  max-height: 120px;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.input::placeholder {
+  color: var(--ink-2);
+}
+
+.sendBtn {
+  flex: none;
+}
+
+/* error line */
+.errorLine {
+  font-size: 13px;
+  color: var(--block);
+}

@@ -1,0 +1,631 @@
+/* Inbox — the approval cockpit. Three-pane, full-viewport-height under the
+   topbar. Breaks out of the padded/max-width content wrapper so the cockpit
+   fills the column edge-to-edge like a mail client. Hairlines over shadows,
+   8px grid, 120–160ms ease-out transitions only. */
+
+/* Cancel the shell's .content padding (32px) and center-clamp so the cockpit
+   spans the full column width and height. Negative margins reclaim the padding;
+   the fixed height makes each pane scroll independently. */
+.cockpit {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 280px;
+  height: calc(100vh - var(--topbar-h));
+  margin: -32px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+/* ── Shared pane chrome ─────────────────────────────────────────────────────── */
+.pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.triagePane {
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.threadPane {
+  background: var(--bg);
+}
+
+.railPane {
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.paneHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.paneTitle {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.paneCount {
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ── Triage list ────────────────────────────────────────────────────────────── */
+.triageList {
+  display: flex;
+  flex-direction: column;
+}
+
+.triageRow {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+  text-align: left;
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.triageRow:hover {
+  background: var(--bg);
+}
+
+.triageRow.selected {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+
+.triageMain {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.triageTopLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.triageName {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.triageName.unread {
+  font-weight: 650;
+}
+
+.triageTime {
+  flex: none;
+  font-size: 11px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.triagePreview {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.triageTagRow {
+  margin-top: 4px;
+}
+
+/* ── Thread pane ────────────────────────────────────────────────────────────── */
+.threadHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.threadHeadMain {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.threadHeadName {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.threadHeadSub {
+  font-size: 12px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.threadHeadSpacer {
+  flex: 1;
+}
+
+.threadScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 20px 8px;
+}
+
+.dayDivider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 16px;
+  color: var(--ink-2);
+}
+
+.dayDivider::before,
+.dayDivider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.dayLabel {
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+/* Bubbles */
+.bubbleRow {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.bubbleRow.inbound {
+  justify-content: flex-start;
+}
+
+.bubbleRow.outbound {
+  justify-content: flex-end;
+}
+
+.bubble {
+  max-width: 68%;
+  padding: 9px 13px;
+  border-radius: 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubbleIn {
+  background: var(--surface-2);
+  border-bottom-left-radius: 5px;
+}
+
+.bubbleOut {
+  background: var(--accent-soft);
+  border-bottom-right-radius: 5px;
+}
+
+.bubbleMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  justify-content: flex-end;
+}
+
+.bubbleMeta.inMeta {
+  justify-content: flex-start;
+}
+
+.bubbleTime {
+  font-size: 11px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.deliveryDot {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+/* System / timeline entries — centered hairline, not bubbles. */
+.systemEntry {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0;
+}
+
+.systemInner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 80%;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.systemLabel {
+  font-weight: 550;
+  color: var(--ink);
+}
+
+/* ── DraftCard ──────────────────────────────────────────────────────────────── */
+.draftFoot {
+  flex: none;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 20px;
+}
+
+.draftHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.draftHeadLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.draftKicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.draftPlaybook {
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The editable well styled like an outbound bubble in review. */
+.draftWell {
+  width: 100%;
+  min-height: 66px;
+  resize: vertical;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.5;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.draftWell:read-only {
+  cursor: default;
+}
+
+.draftWell.editing {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.draftChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 14px;
+}
+
+.draftActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.draftActionsSpacer {
+  flex: 1;
+}
+
+/* The honest approve-result region. */
+.resultRegion {
+  margin-top: 12px;
+}
+
+.resultRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.resultOk {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.resultOkText {
+  color: var(--ink);
+}
+
+.resultDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+  background: var(--ok);
+}
+
+/* ── Context rail ───────────────────────────────────────────────────────────── */
+.railScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.railSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.railSectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.railContactHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.railContactName {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.railContactSub {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.factGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  font-size: 12px;
+}
+
+.factKey {
+  color: var(--ink-2);
+}
+
+.factVal {
+  color: var(--ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.memoryList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memoryItem {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.memoryBullet {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  margin-top: 7px;
+}
+
+.memoryBody {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.memoryProvenance {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+/* Simulate customer reply — demo affordance. */
+.simCard {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.simNote {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+
+.simInputRow {
+  display: flex;
+  gap: 8px;
+}
+
+.simInput {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--ink);
+  transition: border-color var(--dur) var(--ease);
+}
+
+.simInput:focus-visible {
+  border-color: var(--accent);
+}
+
+.simQuick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stopChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--block) 35%, var(--line));
+  border-radius: 999px;
+  background: var(--block-soft);
+  color: var(--block);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+
+.stopChip:hover {
+  background: color-mix(in srgb, var(--block-soft) 80%, var(--block) 8%);
+}
+
+.simHint {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+/* ── Empty / loading ─────────────────────────────────────────────────────────── */
+.centerFill {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.skeletonRow {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skeletonRowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.threadSkeleton {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.railBlock {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

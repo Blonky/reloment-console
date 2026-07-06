@@ -1,0 +1,122 @@
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.line {
+  font-size: 12px;
+  color: var(--ink-2);
+  letter-spacing: 0.01em;
+}
+
+.sectionLabel {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  margin-bottom: 8px;
+}
+
+.playbooks {
+  padding-top: 2px;
+}
+
+.pillRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.playbookChip {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.noneChip {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  font-style: italic;
+}
+
+.ladderBlock {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+/* ── read-only control ───────────────────────────────────────── */
+.controlBlock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: not-allowed;
+}
+
+.segment {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--ink-2);
+  padding: 4px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.segmentActive {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 3px 9px;
+}
+
+.controlAside {
+  display: inline-flex;
+}
+
+.microcopy {
+  font-size: 11px;
+  color: var(--ink-2);
+  margin-top: -6px;
+}

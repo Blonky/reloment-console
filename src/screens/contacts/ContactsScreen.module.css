@@ -1,0 +1,89 @@
+/* Contacts roster — private styles. Tokens from theme.css only; hairline
+   borders over shadows; 8px grid; tabular figures on all numbers. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.pageHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.pageSub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Wide table scrolls inside its own container — the page never scrolls sideways. */
+.tableScroll {
+  overflow-x: auto;
+}
+
+.nameCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.name {
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.activity {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Loading skeleton ───────────────────────────────────────────────────── */
+.skelWrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.skelHead {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skelRow {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  padding: 14px 16px;
+}
+
+.skelRow + .skelRow {
+  border-top: 1px solid var(--line);
+}
+
+.skelName {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}

@@ -1,0 +1,118 @@
+.ladder {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rung {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 0 0 14px;
+}
+
+/* connecting rail between markers */
+.rung::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 14px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--line);
+}
+.rung:last-child {
+  padding-bottom: 0;
+}
+.rung:last-child::before {
+  display: none;
+}
+
+.marker {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  width: 13px;
+  display: flex;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  box-sizing: border-box;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 1px;
+}
+
+.rungHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rungLabel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.rungDetail {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-width: 46ch;
+}
+
+.ceilingTag {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+/* ── rung states ─────────────────────────────────────────────── */
+
+/* reached but not the ceiling — quiet, permitted */
+.reached .dot {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* the current ceiling — the clear accent highlight */
+.ceiling .dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.ceiling .rungLabel {
+  color: var(--accent);
+}
+
+/* above the ceiling — dim / not permitted */
+.above .rungLabel {
+  color: var(--ink-2);
+}
+.above .rungDetail {
+  color: var(--ink-2);
+  opacity: 0.75;
+}
+.above .dot {
+  background: var(--surface-2);
+  border-color: var(--line);
+}

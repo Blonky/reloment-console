@@ -1,0 +1,108 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pageHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.sub {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* intro line inside a flush (padded={false}) card, above its table */
+.cardIntro {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  line-height: 1.5;
+}
+
+.pad {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.contactCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── audit ───────────────────────────────────────────────────── */
+.actionCell {
+  font-weight: 550;
+  color: var(--ink);
+}
+
+.plainReason {
+  color: var(--ink-2);
+}
+
+.hash {
+  display: inline-block;
+  font-family: ui-monospace, 'SF Mono', 'Menlo', monospace;
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 6px;
+  letter-spacing: 0.02em;
+}
+
+/* ── data & compliance ───────────────────────────────────────── */
+.compliance {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.complianceItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 14px;
+  position: relative;
+}
+
+.complianceItem::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.complianceTerm {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.complianceDetail {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
