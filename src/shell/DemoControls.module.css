@@ -178,6 +178,16 @@
   padding-top: 12px;
 }
 
+/* Quiet honesty note — demo vs platform (moved from Home's deleted footer). */
+.note {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
 @media (max-width: 768px) {
   .popover {
     width: 260px;

@@ -1,20 +1,25 @@
 // Home — the agent workspace (Manus/Sauna-shaped; DESIGN.md §5, "Agent
-// workspace (r11)").
+// workspace (r11)"; chat history moved INTO the app sidebar in r12).
 //
-// Home is the product's main control panel: a general greeting, a chat-history
-// rail on the left (create / switch / delete sessions), and a command channel
-// that performs governed actions, researches contacts, and reroutes you.
+// Home is the product's main control panel: a general greeting and a command
+// channel that performs governed actions, researches contacts, and reroutes you.
+// Chat-session history no longer lives here — it lives in the app Sidebar
+// (Sauna/ChatGPT-shape). Home reads the open session from the URL (?s=<id>):
 //
-//   idle    — no active session: general greeting (Fraunces) + one quiet
-//             sub-line → 720px composer → "Today" briefing band → footer.
-//   active  — a live or replayed session owns the transcript; the composer docks
-//             at the bottom; a slim pulse strip rides above. The FIRST submitted
-//             command creates a session and morphs the composer (View Transition).
+//   idle    — no ?s=: general greeting (Fraunces) + one quiet sub-line → 720px
+//             composer → "Today" briefing band. Full centered width.
+//   active  — ?s=<id> or a live turn owns the transcript; the composer docks at
+//             the bottom; a slim pulse strip rides above. The FIRST submitted
+//             command CREATES a session, morphs the composer (View Transition),
+//             and replaces the URL with ?s=<new id>.
 //
 // Session store lives on the DataClient seam (localStorage in demo). Only the
 // TRANSCRIPT is persisted — each user line verbatim + the assistant's PLAIN
 // narration; reopening a session replays those texts WITHOUT re-running actions
-// (live turns keep rich artifact cards; replayed history is plain bubbles).
+// (live turns keep rich artifact cards; replayed history is plain bubbles). The
+// briefing / asks / pulse are live-recursive: a single shell-level subscription
+// (LiveData) debounce-refetches them on any feed event, so the Today band + the
+// topbar badge update together.
 
 import {
   useCallback,
@@ -26,8 +31,9 @@ import {
 import { flushSync } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useClient, useKillSwitch } from '../../shell/ClientContext.tsx';
+import { useLiveData } from '../../shell/LiveData.tsx';
 import { useData } from '../../data/useData.ts';
-import type { AgentSession, Contact } from '../../data/types.ts';
+import type { Contact } from '../../data/types.ts';
 import styles from './HomeScreen.module.css';
 import { parseIntent } from './parseIntent.ts';
 import type { Intent } from './parseIntent.ts';
@@ -53,7 +59,7 @@ import {
   BriefingBand,
   PulseStrip,
 } from './PulseRow.tsx';
-import { IconSend, IconPlus, IconClose, IconCheck, IconHistory } from './icons.tsx';
+import { IconSend } from './icons.tsx';
 
 // ── Transcript model ──────────────────────────────────────────────────────────
 // Live turns carry rich nodes; replayed history is plain text (per replay
@@ -146,32 +152,16 @@ function resolveContact(name: string, contacts: Contact[]): Contact | null {
   return contains.length === 1 ? contains[0] : (contains[0] ?? null);
 }
 
-// Relative time for the session rail ("2m", "3h", "yesterday") from the client
-// clock. Compact and tnum-aligned.
-function relativeTime(iso: string, nowMs: number): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '';
-  const mins = Math.round((nowMs - then) / 60000);
-  if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.round(hrs / 24);
-  if (days === 1) return '1d';
-  if (days < 7) return `${days}d`;
-  const wks = Math.round(days / 7);
-  return `${wks}w`;
-}
-
 export default function HomeScreen() {
   const client = useClient();
   const { setKillSwitch } = useKillSwitch();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Pulse + briefing — refetched after mutating commands so the numbers react.
-  const pulse = useData(() => client.home(), [client]);
-  const briefing = useData(() => client.homeBriefing(), [client]);
+  // Pulse + briefing + asks are live-recursive: the shell's single subscription
+  // (LiveData) debounce-refetches them on any feed event. refreshLive() forces an
+  // immediate refetch after a local mutating command so the numbers react at once.
+  const { pulse, briefing, refreshLive, refreshSessions } = useLiveData();
   const book = useData(() => client.contacts(), [client]);
   const contacts = book.data ?? [];
 
@@ -189,17 +179,13 @@ export default function HomeScreen() {
   }, [booking.data]);
 
   // ── Session state ───────────────────────────────────────────────────────────
-  // sessions is a local mirror of agentSessions() for optimistic create/delete.
-  // activeSessionId === null → idle (a fresh new-chat, no session yet).
-  const [sessions, setSessions] = useState<AgentSession[]>([]);
+  // The open session is URL state (?s=<id>). activeSessionId mirrors it; null →
+  // idle (a fresh new-chat, no session yet). The sidebar owns the history list.
+  const sessionParam = searchParams.get('s');
+  // Start null so the sync effect below ALWAYS loads the ?s= session on mount
+  // (a fresh mount arriving at /?s=<id> — e.g. a sidebar click that remounted
+  // Home — must replay that transcript, not short-circuit as "already open").
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const refreshSessions = useCallback(async () => {
-    const list = await client.agentSessions();
-    setSessions(list);
-  }, [client]);
-  useEffect(() => {
-    void refreshSessions();
-  }, [refreshSessions]);
 
   // Transcript state.
   const seqRef = useRef(0);
@@ -207,10 +193,6 @@ export default function HomeScreen() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
-  // Row-level delete-confirm state on the rail (id being confirmed, or null).
-  const [confirmId, setConfirmId] = useState<string | null>(null);
-  // Mobile: the history rail collapses behind a glyph → this opens it as a sheet.
-  const [railOpen, setRailOpen] = useState(false);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastTurnRef = useRef<HTMLDivElement>(null);
@@ -248,35 +230,34 @@ export default function HomeScreen() {
     async (on: boolean) => {
       await client.setKillSwitch(on);
       setKillSwitch(on); // sync the shell context → red topbar band appears/clears
-      pulse.refetch();
+      refreshLive();
     },
-    [client, setKillSwitch, pulse],
+    [client, setKillSwitch, refreshLive],
   );
 
-  // ── Session actions ─────────────────────────────────────────────────────────
-  // Start a fresh chat: clear the transcript, drop the active session (a session
-  // is minted lazily on the first submit), focus the composer.
-  const newChat = useCallback(() => {
-    setTurns([]);
-    setActiveSessionId(null);
-    setConfirmId(null);
-    setInput('');
-    setRailOpen(false);
-    inputRef.current?.focus();
-  }, []);
+  // ── Session ↔ URL sync ────────────────────────────────────────────────────
+  // The URL (?s=<id>) is the source of truth for which session is open. When it
+  // changes (sidebar click, new chat → /, or a delete that dropped us to idle),
+  // load or clear the transcript. Live turns already in flight for the SAME
+  // session must not be clobbered — guard on a mismatch with activeSessionRef.
+  // Replay renders the stored texts as PLAIN bubbles (no re-execution).
+  useEffect(() => {
+    // Same session already loaded (e.g. we just created it) → nothing to do.
+    if (sessionParam === activeSessionRef.current) return;
 
-  // Open an existing session: load its transcript and replay it as PLAIN text
-  // bubbles (no re-execution of the original commands, per replay semantics).
-  const openSession = useCallback(
-    async (id: string) => {
-      if (id === activeSessionRef.current) {
-        setRailOpen(false);
-        return;
-      }
-      setConfirmId(null);
-      setRailOpen(false);
-      const msgs = await client.agentSessionMessages(id);
-      setActiveSessionId(id);
+    let live = true;
+    if (sessionParam === null) {
+      // New chat / idle.
+      setActiveSessionId(null);
+      setTurns([]);
+      setInput('');
+      inputRef.current?.focus();
+      return;
+    }
+    // Open the requested session: load + replay its transcript.
+    void client.agentSessionMessages(sessionParam).then((msgs) => {
+      if (!live) return;
+      setActiveSessionId(sessionParam);
       setTurns(
         msgs.map((m) => ({
           id: nextId(),
@@ -285,24 +266,12 @@ export default function HomeScreen() {
           text: m.body,
         })),
       );
-    },
-    [client],
-  );
-
-  // Delete a session (optimistic). If it was active, drop to the idle new-chat.
-  const deleteSession = useCallback(
-    async (id: string) => {
-      setSessions((prev) => prev.filter((s) => s.id !== id));
-      setConfirmId(null);
-      if (id === activeSessionRef.current) {
-        setActiveSessionId(null);
-        setTurns([]);
-      }
-      await client.deleteAgentSession(id);
-      void refreshSessions();
-    },
-    [client, refreshSessions],
-  );
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionParam, client]);
 
   // Dispatch a parsed intent to its governed tool + build the reply node AND the
   // plain narration line to persist. Each tool call is wrapped in a real
@@ -348,8 +317,7 @@ export default function HomeScreen() {
             }),
             durationMs: performance.now() - t0,
           };
-          pulse.refetch();
-          briefing.refetch();
+          refreshLive();
           const narration =
             result.enrolled.length > 0
               ? `Enrolled ${result.enrolled.length} and held ${result.excluded.length} back at the gate.`
@@ -423,8 +391,7 @@ export default function HomeScreen() {
             disclosure: disclosureFor(intent),
             durationMs: performance.now() - t0,
           };
-          pulse.refetch();
-          briefing.refetch();
+          refreshLive();
           return {
             node: <MissedCallReply conversationId={conversationId} meta={meta} />,
             narration:
@@ -510,7 +477,7 @@ export default function HomeScreen() {
     // submit is referenced through the ref pattern (defined below) to avoid a
     // cycle; it is otherwise stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, contacts, runKillSwitch, pulse, briefing, navigate],
+    [client, contacts, runKillSwitch, refreshLive, navigate],
   );
 
   // Submit a line: render the user turn + thinking row, dispatch, then persist
@@ -554,6 +521,17 @@ export default function HomeScreen() {
         sessionId = session.id;
         setActiveSessionId(session.id);
         activeSessionRef.current = session.id;
+        // Reflect the new session in the URL (replace — the idle Home wasn't a
+        // history entry). The sync effect sees the param already matches
+        // activeSessionRef and skips a reload of the in-flight transcript.
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.set('s', session.id);
+            return next;
+          },
+          { replace: true },
+        );
       }
       await client.appendAgentMessage(sessionId, 'user', text);
 
@@ -576,7 +554,7 @@ export default function HomeScreen() {
         inputRef.current?.focus();
       }
     },
-    [busy, dispatch, resolveThinking, client, refreshSessions],
+    [busy, dispatch, resolveThinking, client, refreshSessions, setSearchParams],
   );
 
   // Command-palette / one-shot deep link: /?cmd=<phrase> submits the phrase
@@ -606,78 +584,6 @@ export default function HomeScreen() {
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   };
-
-  // ── Session rail ────────────────────────────────────────────────────────────
-  const nowMs = client.now();
-  const rail = (
-    <nav className={styles.rail} aria-label="Chat history">
-      <button
-        type="button"
-        className={styles.newChatBtn}
-        onClick={newChat}
-        disabled={busy}
-      >
-        <IconPlus size={15} />
-        New chat
-      </button>
-      <div className={styles.railList}>
-        {sessions.map((s) => {
-          const isActive = s.id === activeSessionId;
-          const confirming = confirmId === s.id;
-          return (
-            <div
-              key={s.id}
-              className={`${styles.railRow} ${isActive ? styles.railRowActive : ''}`}
-            >
-              {confirming ? (
-                <div className={styles.railConfirm}>
-                  <span className={styles.railConfirmLabel}>Delete?</span>
-                  <button
-                    type="button"
-                    className={styles.railConfirmYes}
-                    onClick={() => void deleteSession(s.id)}
-                    aria-label={`Confirm delete ${s.title}`}
-                  >
-                    <IconCheck size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.railConfirmNo}
-                    onClick={() => setConfirmId(null)}
-                    aria-label="Cancel delete"
-                  >
-                    <IconClose size={14} />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className={styles.railOpen}
-                    onClick={() => void openSession(s.id)}
-                    title={s.title}
-                  >
-                    <span className={styles.railTitle}>{s.title}</span>
-                    <span className={`${styles.railTime} tnum`}>
-                      {relativeTime(s.updated_at, nowMs)}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.railDelete}
-                    onClick={() => setConfirmId(s.id)}
-                    aria-label={`Delete ${s.title}`}
-                  >
-                    <IconClose size={13} />
-                  </button>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </nav>
-  );
 
   // The composer — one node, reused idle (centered) and active (sticky dock).
   const composer = (
@@ -777,94 +683,45 @@ export default function HomeScreen() {
     </div>
   );
 
-  // The mobile history glyph (≤900px) + sheet scrim, shared by both states.
-  const historyGlyph = (
-    <button
-      type="button"
-      className={styles.historyGlyph}
-      onClick={() => setRailOpen(true)}
-      aria-label="Open chat history"
-    >
-      <IconHistory size={16} />
-    </button>
-  );
-  const railSheet = railOpen && (
-    <>
-      <div
-        className={styles.railScrim}
-        onClick={() => setRailOpen(false)}
-        aria-hidden="true"
-      />
-      <div className={styles.railSheet} role="dialog" aria-label="Chat history">
-        <div className={styles.railSheetHead}>
-          <span className={styles.railSheetTitle}>Chats</span>
-          <button
-            type="button"
-            className={styles.railSheetClose}
-            onClick={() => setRailOpen(false)}
-            aria-label="Close chat history"
-          >
-            <IconClose size={16} />
-          </button>
-        </div>
-        {rail}
-      </div>
-    </>
-  );
-
   // ── Idle — a definite-height flex column that fits one viewport (≥720px tall).
+  // Full centered width now that chat history lives in the app sidebar.
   if (!active) {
     return (
-      <div className={styles.workspace}>
-        <div className={styles.railSlot}>{rail}</div>
-        {railSheet}
-        <div className={`${styles.page} ${styles.pageIdle}`}>
-          {historyGlyph}
-          <div className={styles.idleSpacer} />
-          <header className={`${styles.greetBlock} ${styles.greetMorph}`}>
-            <h1 className={styles.greeting}>{greeting}</h1>
-            <p className={styles.subline}>
-              What should we get done{firstName ? `, ${firstName}` : ''}?
-            </p>
-          </header>
-
-          <div className={styles.composerSlotIdle}>{composer}</div>
-
-          <div className={styles.bandIdle}>
-            <BriefingBand
-              briefing={briefing.data}
-              pulse={pulse.data}
-              loading={briefing.loading && briefing.data === undefined}
-              onRun={(c) => void submit(c)}
-            />
-          </div>
-
-          <div className={styles.idleSpacer} />
-
-          <p className={styles.honesty}>
-            Deterministic router today — the language-model planner ships with the
-            platform connection.
+      <div className={`${styles.page} ${styles.pageIdle}`}>
+        <div className={styles.idleSpacer} />
+        <header className={`${styles.greetBlock} ${styles.greetMorph}`}>
+          <h1 className={styles.greeting}>{greeting}</h1>
+          <p className={styles.subline}>
+            What should we get done{firstName ? `, ${firstName}` : ''}?
           </p>
+        </header>
+
+        <div className={styles.composerSlotIdle}>{composer}</div>
+
+        <div className={styles.bandIdle}>
+          <BriefingBand
+            briefing={briefing}
+            pulse={pulse}
+            loading={briefing === undefined}
+            onRun={(c) => void submit(c)}
+          />
         </div>
+
+        <div className={styles.idleSpacer} />
       </div>
     );
   }
 
   // ── Active — a clean chat: slim pulse strip, transcript, docked composer.
   return (
-    <div className={styles.workspace}>
-      <div className={styles.railSlot}>{rail}</div>
-      {railSheet}
-      <div className={`${styles.page} ${styles.pageActive}`}>
-        <div className={styles.pulseStripSlot}>
-          {historyGlyph}
-          <PulseStrip pulse={pulse.data} />
-        </div>
-
-        {transcript}
-
-        <div className={styles.composerDock}>{composer}</div>
+    <div className={`${styles.page} ${styles.pageActive}`}>
+      <div className={styles.pulseStripSlot}>
+        <PulseStrip pulse={pulse} />
       </div>
+
+      {transcript}
+
+      <div className={styles.composerDock}>{composer}</div>
     </div>
   );
 }

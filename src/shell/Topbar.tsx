@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import DemoControls from './DemoControls.tsx';
+import Notifications from './Notifications.tsx';
 import styles from './Topbar.module.css';
 
 export interface TopbarProps {
@@ -75,11 +76,16 @@ export default function Topbar({ title, mode, killSwitch, onOpenPalette, onOpenN
           <span className={styles.paletteKbd}>{isMac ? '⌘' : 'Ctrl'}</span>
           <span className={styles.paletteKbd}>K</span>
         </button>
+        <Notifications />
         {mode === 'demo' && <DemoControls />}
-        <span className={styles.sending}>
+        <Link
+          to="/trust"
+          className={styles.sending}
+          aria-label="Sending active — open Trust & Settings"
+        >
           <span className={styles.dot} />
           Sending active
-        </span>
+        </Link>
       </div>
     </header>
   );

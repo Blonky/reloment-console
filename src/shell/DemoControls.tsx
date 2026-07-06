@@ -196,6 +196,13 @@ export default function DemoControls() {
               Simulate a missed call
             </button>
           </div>
+
+          {/* The honesty note about demo vs platform lives here — its correct home
+              now that Home's footer line is gone (r12). */}
+          <p className={styles.note}>
+            Demo mode — deterministic agent. The platform connection runs the live
+            planner.
+          </p>
         </div>
       )}
     </div>

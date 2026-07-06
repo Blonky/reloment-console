@@ -59,7 +59,7 @@
   color: var(--accent);
 }
 
-/* Status dot as a compact white pill (§4). */
+/* Status dot as a compact white pill (§4) — now a link into Trust & Settings. */
 .sending {
   display: inline-flex;
   align-items: center;
@@ -71,6 +71,18 @@
   font-size: 12px;
   font-weight: 500;
   color: var(--ink-2);
+  text-decoration: none;
+  transition:
+    box-shadow var(--dur) var(--ease),
+    transform var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.sending:hover {
+  box-shadow: var(--shadow-float);
+  transform: translateY(-1px);
+  color: var(--ink);
+  text-decoration: none;
 }
 
 .dot {
