@@ -11,6 +11,13 @@
   background: var(--bg);
 }
 
+.left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .title {
   font-size: 15px;
   font-weight: 600;
@@ -21,6 +28,35 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* Hamburger + mobile wordmark — hidden on desktop, shown ≤768px. */
+.hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-left: -10px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+
+.hamburger:hover {
+  background: rgba(28, 27, 23, 0.05);
+}
+
+.wordmark {
+  display: none;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 520;
+  letter-spacing: -0.01em;
+  color: var(--accent);
 }
 
 /* Status dot as a compact white pill (§4). */
@@ -117,4 +153,47 @@
 .resumeLink:hover {
   color: #ffffff;
   text-decoration: underline;
+}
+
+/* ── Mobile (≤768px) ──────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .topbar {
+    padding: 0 12px;
+  }
+
+  .paused {
+    padding: 0 12px;
+  }
+
+  .hamburger {
+    display: inline-flex;
+  }
+
+  .wordmark {
+    display: inline;
+  }
+
+  /* On phones the page title is redundant next to the wordmark — hide it to
+     keep the topbar to one line (the drawer + active nav pill name the screen). */
+  .title {
+    display: none;
+  }
+
+  .pausedTitle {
+    display: inline;
+    font-size: 14px;
+  }
+
+  /* Drop the ⌘K hint on phones (no physical keyboard); keep demo + status. */
+  .paletteHint {
+    display: none;
+  }
+
+  .pausedRight {
+    gap: 10px;
+  }
+
+  .resumeLink {
+    display: none;
+  }
 }

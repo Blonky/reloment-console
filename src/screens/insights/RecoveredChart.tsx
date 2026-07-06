@@ -15,15 +15,16 @@ function shortDollars(cents: number): string {
 }
 
 // Geometry in viewBox units. Bars derive their heights proportionally from cents.
-const VB_W = 560;
-const VB_H = 220;
+// A wide/short aspect keeps the rendered SVG ≤240px tall at full card width (§6).
+const VB_W = 680;
+const VB_H = 180;
 const PAD_L = 8;
 const PAD_R = 8;
-const BASELINE_Y = 176; // y of the axis; area above holds the bars
-const LABEL_Y = 196; // month labels beneath the baseline
-const PLOT_TOP = 24; // reserve headroom for the value labels above bars
+const BASELINE_Y = 142; // y of the axis; area above holds the bars
+const LABEL_Y = 162; // month labels beneath the baseline
+const PLOT_TOP = 22; // reserve headroom for the value labels above bars
 const MAX_BAR_H = BASELINE_Y - PLOT_TOP;
-const BAR_W = 34;
+const BAR_W = 38;
 
 export default function RecoveredChart({ series }: RecoveredChartProps) {
   const max = Math.max(...series.map((p) => p.cents), 1);

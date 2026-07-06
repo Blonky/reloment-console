@@ -44,9 +44,13 @@ export default function TriagePane({ rows, loading, selectedId, onSelect }: Tria
   const client = useClient();
   return (
     <section className={`${styles.pane} ${styles.triagePane}`} aria-label="Triage">
-      <div className={styles.paneHead}>
-        <span className={styles.paneTitle}>Inbox</span>
-        {!loading && <span className={styles.paneCount}>{rows.length}</span>}
+      {/* Slim header — the topbar already says "Inbox"; here we only quantify. */}
+      <div className={styles.triageHead}>
+        {!loading && (
+          <span className={styles.triageHeadCount}>
+            {rows.length} {rows.length === 1 ? 'conversation' : 'conversations'}
+          </span>
+        )}
       </div>
       <div className={styles.scroll}>
         {loading ? (

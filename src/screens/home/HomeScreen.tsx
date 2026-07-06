@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { flushSync } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { useClient, useKillSwitch } from '../../shell/ClientContext.tsx';
 import { useData } from '../../data/useData.ts';
@@ -39,6 +40,7 @@ import KillSwitchCard from './KillSwitchCard.tsx';
 import type { KillSwitchMode } from './KillSwitchCard.tsx';
 import {
   AnalyticsBand,
+  PulseStrip,
   deriveSignals,
 } from './PulseRow.tsx';
 import { IconSend } from './icons.tsx';
@@ -171,6 +173,10 @@ export default function HomeScreen() {
   const lastTurnRef = useRef<HTMLDivElement>(null);
 
   const active = turns.length > 0;
+  // Read the active state inside submit without adding turns to its deps (which
+  // would re-create the callback — and the ?cmd effect's dependency — each turn).
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   // Keep the newest turn in view — scroll the shell's document, not a nested box.
   useEffect(() => {
@@ -284,11 +290,31 @@ export default function HomeScreen() {
       setInput('');
       if (inputRef.current) inputRef.current.style.height = 'auto';
       const intent = parseIntent(text);
-      setTurns((prev) => [
-        ...prev,
-        { id: nextId(), role: 'user', text },
-        { id: nextId(), role: 'thinking', label: thinkingLabel(intent) },
-      ]);
+
+      // The idle→active flip is a feature: on the FIRST turn, morph the composer
+      // from centre-stage to the docked bottom and fade the greeting away. Wrap
+      // the state flip in a View Transition where supported (flushSync makes the
+      // DOM commit synchronously inside the callback); everything else — and
+      // subsequent turns — take the CSS entrance fallback.
+      const appendTurns = () =>
+        setTurns((prev) => [
+          ...prev,
+          { id: nextId(), role: 'user', text },
+          { id: nextId(), role: 'thinking', label: thinkingLabel(intent) },
+        ]);
+
+      const isFirstTurn = !activeRef.current;
+      const startViewTransition = (
+        document as Document & {
+          startViewTransition?: (cb: () => void) => void;
+        }
+      ).startViewTransition;
+      if (isFirstTurn && typeof startViewTransition === 'function') {
+        startViewTransition.call(document, () => flushSync(appendTurns));
+      } else {
+        appendTurns();
+      }
+
       setBusy(true);
       try {
         await dispatch(intent);
@@ -342,7 +368,7 @@ export default function HomeScreen() {
 
   // The composer — one node, reused idle (centered) and active (sticky dock).
   const composer = (
-    <div className={styles.composerCard}>
+    <div className={`${styles.composerCard} ${styles.composerMorph}`}>
       <textarea
         ref={inputRef}
         className={styles.input}
@@ -389,98 +415,101 @@ export default function HomeScreen() {
     </div>
   );
 
+  // ── Idle — a definite-height flex column that fits one viewport (≥720px tall).
+  // Flexible spacers absorb the slack so greeting + composer + band + footer all
+  // land without a page scroll; below 720px it falls back to min-content heights.
+  if (!active) {
+    return (
+      <div className={`${styles.page} ${styles.pageIdle}`}>
+        <div className={styles.idleSpacer} />
+        <header className={`${styles.greetBlock} ${styles.greetMorph}`}>
+          <h1 className={styles.greeting}>{greeting}</h1>
+          <p className={styles.subline}>
+            Every command runs the governed send gate — replies show exactly who
+            was excluded, and why.
+          </p>
+        </header>
+
+        <div className={styles.composerSlotIdle}>{composer}</div>
+
+        <div className={styles.bandIdle}>
+          <AnalyticsBand
+            pulse={pulse.data}
+            signals={signals}
+            signalsLoading={book.loading}
+            onRun={(cmd) => void submit(cmd)}
+          />
+        </div>
+
+        <div className={styles.idleSpacer} />
+
+        <p className={styles.honesty}>
+          Deterministic router today — the language-model planner ships with the
+          platform connection.
+        </p>
+      </div>
+    );
+  }
+
+  // ── Active — a clean chat: slim pulse strip, transcript, docked composer.
+  // No greeting, no analytics band (per §5). The pulse strip live-updates.
   return (
-    <div className={styles.page}>
-      {!active && (
-        <>
-          <div className={styles.greetSpacer} />
-          <header className={styles.greetBlock}>
-            <h1 className={styles.greeting}>{greeting}</h1>
-            <p className={styles.subline}>
-              Every command runs the governed send gate — replies show exactly
-              who was excluded, and why.
-            </p>
-          </header>
-        </>
-      )}
+    <div className={`${styles.page} ${styles.pageActive}`}>
+      <div className={styles.pulseStripSlot}>
+        <PulseStrip pulse={pulse.data} />
+      </div>
 
-      {/* Idle: composer centered at the top. Active: composer is rendered
-          separately as a sticky dock below, so here it only appears when idle. */}
-      {!active && <div className={styles.composerSlotIdle}>{composer}</div>}
-
-      {/* Transcript — only in the active state; owns the centered column. */}
-      {active && (
-        <div
-          className={styles.transcript}
-          aria-live="polite"
-          aria-label="Command transcript"
-        >
-          {turns.map((t, i) => {
-            const isLast = i === turns.length - 1;
-            const refProp = isLast ? { ref: lastTurnRef } : {};
-            if (t.role === 'user') {
-              return (
-                <div
-                  className={`${styles.turn} ${styles.turnUser}`}
-                  key={t.id}
-                  {...refProp}
-                >
-                  <div className={styles.userBubble}>{t.text}</div>
-                </div>
-              );
-            }
-            if (t.role === 'thinking') {
-              return (
-                <div
-                  className={`${styles.turn} ${styles.turnSystem}`}
-                  key={t.id}
-                  {...refProp}
-                >
-                  <div className={styles.thinking}>
-                    <span className={styles.thinkingDots}>
-                      <span />
-                      <span />
-                      <span />
-                    </span>
-                    {t.label}
-                  </div>
-                </div>
-              );
-            }
-            // reply
+      <div
+        className={styles.transcript}
+        aria-live="polite"
+        aria-label="Command transcript"
+      >
+        {turns.map((t, i) => {
+          const isLast = i === turns.length - 1;
+          const refProp = isLast ? { ref: lastTurnRef } : {};
+          if (t.role === 'user') {
+            return (
+              <div
+                className={`${styles.turn} ${styles.turnUser}`}
+                key={t.id}
+                {...refProp}
+              >
+                <div className={styles.userBubble}>{t.text}</div>
+              </div>
+            );
+          }
+          if (t.role === 'thinking') {
             return (
               <div
                 className={`${styles.turn} ${styles.turnSystem}`}
                 key={t.id}
                 {...refProp}
               >
-                <div className={styles.systemWrap}>{t.node}</div>
+                <div className={styles.thinking}>
+                  <span className={styles.thinkingDots}>
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                  {t.label}
+                </div>
               </div>
             );
-          })}
-        </div>
-      )}
-
-      {/* Sticky composer dock — active state only. */}
-      {active && <div className={styles.composerDock}>{composer}</div>}
-
-      {/* Analytics band — idle: below the composer; active: below the
-          transcript. Same component, still live-updating either way. */}
-      <div className={active ? styles.bandActive : styles.bandIdle}>
-        <AnalyticsBand
-          pulse={pulse.data}
-          signals={signals}
-          signalsLoading={book.loading}
-          onRun={(cmd) => void submit(cmd)}
-        />
+          }
+          // reply
+          return (
+            <div
+              className={`${styles.turn} ${styles.turnSystem}`}
+              key={t.id}
+              {...refProp}
+            >
+              <div className={styles.systemWrap}>{t.node}</div>
+            </div>
+          );
+        })}
       </div>
 
-      {!active && (
-        <p className={styles.honesty}>
-          Deterministic router today — the language-model planner ships with the
-          platform connection.
-        </p>
-      )}
+      <div className={styles.composerDock}>{composer}</div>
     </div>
   );
 }

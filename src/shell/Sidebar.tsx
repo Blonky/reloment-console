@@ -82,16 +82,18 @@ const ITEMS: NavItem[] = [
 
 const TENANT = 'Hartley Insurance Group';
 
-export default function Sidebar() {
+// The shared nav pills + tenant block. Reused by the desktop sidebar and the
+// mobile drawer. `onNavigate` lets the drawer close itself on a nav tap.
+export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <nav className={styles.sidebar} aria-label="Primary">
-      <div className={styles.wordmark}>Reloment</div>
+    <>
       <div className={styles.nav}>
         {ITEMS.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.end}
+            onClick={onNavigate}
             className={({ isActive }) =>
               isActive ? `${styles.link} ${styles.linkActive}` : styles.link
             }
@@ -110,6 +112,15 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+export default function Sidebar() {
+  return (
+    <nav className={styles.sidebar} aria-label="Primary">
+      <div className={styles.wordmark}>Reloment</div>
+      <SidebarNav />
     </nav>
   );
 }

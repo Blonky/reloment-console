@@ -55,10 +55,26 @@ interface Discovery {
   queue: QueueItem[];
 }
 
+// Track the mobile breakpoint (≤768px) so the cockpit can run a single-pane
+// flow: the triage list and the thread pane never show at the same time.
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const onChange = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isMobile;
+}
+
 export default function InboxScreen() {
   const client = useClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get('c');
+  const isMobile = useIsMobile();
 
   // A nonce that bumps after any mutation, forcing the discovery set to refetch.
   const [discoveryNonce, setDiscoveryNonce] = useState(0);
@@ -133,12 +149,13 @@ export default function InboxScreen() {
   }, [discovery.data]);
 
   // Default selection: first row (needs-you-first) once discovery resolves.
+  // Skipped on mobile — phones open on the triage list; the thread is a push.
   useEffect(() => {
-    if (selectedId === null && triageRows.length > 0) {
+    if (!isMobile && selectedId === null && triageRows.length > 0) {
       setSearchParams({ c: triageRows[0].conversationId }, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, triageRows]);
+  }, [selectedId, triageRows, isMobile]);
 
   const onSelect = useCallback(
     (conversationId: string) => {
@@ -146,6 +163,18 @@ export default function InboxScreen() {
     },
     [setSearchParams],
   );
+
+  // Mobile back chevron: clear ?c= to return from the thread to the triage list.
+  const onBack = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('c');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
 
   // ── Thread detail for the selected conversation ─────────────────────────────
   const thread = useData(
@@ -211,8 +240,14 @@ export default function InboxScreen() {
     setContextSheetOpen(false);
   }, [selectedId]);
 
+  // On mobile the cockpit is single-pane: showing the thread iff one is selected.
+  const showThreadOnMobile = selectedId !== null;
+
   return (
-    <div className={styles.cockpit}>
+    <div
+      className={styles.cockpit}
+      data-mobile-view={showThreadOnMobile ? 'thread' : 'list'}
+    >
       <TriagePane
         rows={triageRows}
         loading={triageLoading}
@@ -228,6 +263,7 @@ export default function InboxScreen() {
         onEdit={onEdit}
         onTakeover={onTakeover}
         onOpenContext={() => setContextSheetOpen(true)}
+        onBack={onBack}
       />
       {/* Docked rail — the grid's third column; CSS hides it below 1100px. */}
       <div className={styles.railDocked}>

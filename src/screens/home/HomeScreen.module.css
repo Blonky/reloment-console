@@ -2,8 +2,8 @@
    on paper; the page scrolls as a document (the shell's <main> scrolls). Tokens
    from theme.css only; soft shadows over hard lines; 160–200ms ease-out. */
 
-/* The centered document column. Idle and active both live here; the width caps
-   are applied per-section (720 composer, 980 band, ~720 transcript). */
+/* The centered column. Idle and active both live here; width caps are applied
+   per-section (720 composer, 980 band, ~720 transcript). */
 .page {
   display: flex;
   flex-direction: column;
@@ -11,25 +11,41 @@
   width: 100%;
 }
 
-/* ── Idle: greeting ─────────────────────────────────────────────────────── */
-.greetSpacer {
-  height: 12vh;
-  flex: none;
+/* ── Idle: one viewport, no page scroll (≥720px tall) ─────────────────────────
+   The shell's <main> is the document scroller; the content wrapper pads 40px on
+   each side and 56px topbar sits above. So the exact height the idle column has
+   to fit within is 100vh − topbar − 80px of padding. We make the idle page that
+   definite height and distribute the slack with flexible spacers. flex: 1 grows
+   the page inside the shell's min-height:100% column at short viewports. */
+.pageIdle {
+  flex: 1;
+  min-height: 0;
+  height: calc(100vh - var(--topbar-h) - 80px);
+  justify-content: flex-start;
+}
+
+/* Flexible spacers absorb the slack above the greeting and below the band, so
+   the block stays optically centred and nothing clips. They collapse first when
+   the viewport is short. */
+.idleSpacer {
+  flex: 1 1 0;
+  min-height: 8px;
 }
 
 .greetBlock {
+  flex: none;
   width: 100%;
   max-width: 720px;
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 36px;
+  gap: 10px;
+  margin-bottom: 28px;
 }
 
 .greeting {
   font-family: var(--font-display);
-  font-size: 42px;
+  font-size: clamp(28px, 3.2vw, 40px);
   font-weight: 500;
   line-height: 1.1;
   letter-spacing: -0.01em;
@@ -39,14 +55,28 @@
 
 .subline {
   font-size: 13px;
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--ink-2);
   max-width: 52ch;
   margin: 0 auto;
 }
 
+/* Below 720px tall: graceful page scroll — min-content heights, never clip. */
+@media (max-height: 719px) {
+  .pageIdle {
+    height: auto;
+    min-height: calc(100vh - var(--topbar-h) - 80px);
+  }
+
+  .idleSpacer {
+    flex: 0 0 24px;
+    min-height: 0;
+  }
+}
+
 /* ── Composer card (the centerpiece) ────────────────────────────────────── */
 .composerSlotIdle {
+  flex: none;
   width: 100%;
   max-width: 720px;
 }
@@ -272,39 +302,35 @@
   pointer-events: auto;
 }
 
-/* ── Analytics band ─────────────────────────────────────────────────────── */
+/* ── Analytics band (idle only) ─────────────────────────────────────────── */
 .bandIdle {
+  flex: none;
   width: 100%;
   max-width: 980px;
-  margin-top: 48px;
-}
-
-.bandActive {
-  width: 100%;
-  max-width: 980px;
-  margin-top: 8px;
+  margin-top: 28px;
 }
 
 .band {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .statRow {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 12px;
 }
 
+/* Compact stat cards (§5): padding 14–16, value ~24px, sub 11px. */
 .statCard {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 20px;
+  gap: 3px;
+  padding: 14px 16px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-soft);
   text-decoration: none;
   color: inherit;
@@ -326,13 +352,13 @@
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--ink-2);
 }
 
 .statValue {
   font-family: var(--font-display);
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 500;
   line-height: 1.05;
   letter-spacing: -0.01em;
@@ -345,39 +371,46 @@
 }
 
 .statSub {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ink-2);
 }
 
+/* Slim Signals card — one card holding up to three single-line rows. */
 .signalsCard {
   width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+  padding: 12px 16px;
 }
 
 /* ── Honesty footer ─────────────────────────────────────────────────────── */
 .honesty {
-  font-size: 12px;
+  flex: none;
+  font-size: 11px;
   color: var(--ink-2);
   text-align: center;
-  margin-top: 40px;
+  margin-top: 16px;
 }
 
-/* ── Signals ────────────────────────────────────────────────────────────── */
+/* ── Signals (single-line rows) ─────────────────────────────────────────── */
 .signals {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .signalRow {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
 }
 
 .signalDot {
   width: 6px;
   height: 6px;
-  margin-top: 6px;
   border-radius: 50%;
   background: var(--hold);
   flex: none;
@@ -391,21 +424,20 @@
   background: var(--ok);
 }
 
-.signalBody {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
+/* One line, truncating with an ellipsis; the action link sits inline at the end. */
 .signalText {
   font-size: 13px;
   color: var(--ink);
-  line-height: 1.45;
+  line-height: 1.4;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .signalAction {
-  align-self: flex-start;
+  flex: none;
+  margin-left: auto;
   background: none;
   border: none;
   padding: 0;
@@ -413,12 +445,71 @@
   font-weight: 600;
   color: var(--accent);
   cursor: pointer;
+  white-space: nowrap;
   transition: opacity var(--dur) var(--ease);
 }
 
 .signalAction:hover {
   opacity: 0.72;
   text-decoration: underline;
+}
+
+.signalEmpty {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* ── Active: slim pulse strip ───────────────────────────────────────────── */
+.pageActive {
+  min-height: calc(100vh - var(--topbar-h) - 80px);
+}
+
+.pulseStripSlot {
+  width: 100%;
+  max-width: 720px;
+}
+
+.pulseStrip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 2px 0 10px;
+}
+
+.pulsePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+.pulsePill b {
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.pulsePillLink {
+  transition: color var(--dur) var(--ease);
+}
+
+.pulsePillLink:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.pulseOk {
+  color: var(--ok);
+}
+
+.pulseDivider {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  flex: none;
 }
 
 /* ── Reply cards (shared — rendered inside the transcript) ───────────────── */
@@ -803,5 +894,102 @@
 @media (max-width: 760px) {
   .statRow {
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── Mobile (≤768px): idle may scroll; signals stack; strip left-aligned. ──── */
+@media (max-width: 768px) {
+  /* Release the one-viewport lock — phones scroll (the rule is desktop-only).
+     Content padding is 40px vertical here (shell tightens to 20px each side). */
+  .pageIdle {
+    height: auto;
+    min-height: calc(100vh - var(--topbar-h) - 40px);
+  }
+
+  .idleSpacer {
+    flex: 0 0 20px;
+    min-height: 0;
+  }
+
+  .pageActive {
+    min-height: calc(100vh - var(--topbar-h) - 40px);
+  }
+
+  /* Signals wrap: allow the row to break so the action drops below the text
+     instead of colliding at narrow widths. */
+  .signalRow {
+    flex-wrap: wrap;
+  }
+
+  .signalText {
+    white-space: normal;
+    flex: 1 1 100%;
+  }
+
+  .signalAction {
+    margin-left: 18px;
+  }
+}
+
+/* ── Idle→active view transition (motion-safe only) ──────────────────────────
+   The composer carries a stable view-transition-name so the browser morphs it
+   from centre-stage (idle) to the bottom dock (active). The greeting fades and
+   rises away. Where View Transitions are unsupported, the CSS fallback below
+   gives the transcript + dock a soft entrance. prefers-reduced-motion collapses
+   all of it (the global reset zeroes animation/transition durations). */
+@media (prefers-reduced-motion: no-preference) {
+  .composerMorph {
+    view-transition-name: home-composer;
+  }
+
+  .greetMorph {
+    view-transition-name: home-greeting;
+  }
+
+  /* The greeting only exists in idle; on the flip its ::view-transition-old
+     fades and rises. (There is no ::new — it's removed — so only old animates.) */
+  ::view-transition-old(home-greeting) {
+    animation: home-greet-out 200ms var(--ease) both;
+  }
+
+  @keyframes home-greet-out {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+  }
+
+  /* CSS fallback for browsers without startViewTransition: soft entrance on the
+     transcript and the docked composer. Harmless where the VT also runs. */
+  .pageActive .transcript {
+    animation: home-active-in 200ms var(--ease) both;
+  }
+
+  .composerDock {
+    animation: home-dock-in 200ms var(--ease) both;
+  }
+
+  @keyframes home-active-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes home-dock-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }

@@ -209,6 +209,26 @@
   padding: 1px 8px;
 }
 
+/* Slim triage header (§ decluttered — 40px, count only, no repeated title). */
+.triageHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.triageHeadCount {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
 .scroll {
   flex: 1;
   min-height: 0;
@@ -306,6 +326,27 @@
   padding: 0 20px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
+}
+
+/* Mobile back chevron — hidden on desktop (both panes visible). */
+.threadBack {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-left: -8px;
+  flex: none;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+
+.threadBack:hover {
+  background: rgba(28, 27, 23, 0.05);
 }
 
 .threadHeadMain {
@@ -464,57 +505,56 @@
   color: var(--ink);
 }
 
-/* ── DraftCard ──────────────────────────────────────────────────────────────── */
+/* ── DraftCard ───────────────────────────────────────────────────────────────
+   flex: none so the card never grows; the thread scroll region (flex:1,
+   min-height:0) absorbs the pressure and Approve stays above the fold. */
 .draftFoot {
   flex: none;
   border-top: 1px solid var(--line);
   background: var(--surface);
-  padding: 16px 20px;
+  padding: 12px 20px 14px;
 }
 
+/* One compact meta line: kicker (with playbook inline) left, review pill right. */
 .draftHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
-}
-
-.draftHeadLeft {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  margin-bottom: 8px;
   min-width: 0;
 }
 
 .draftKicker {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--accent);
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .draftPlaybook {
-  font-size: 12px;
+  font-weight: 500;
   color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-/* The editable well styled like an outbound bubble in review. */
+/* The editable well styled like an outbound bubble in review. Auto-sizes 2–4
+   rows via JS (max-height cap here as a backstop), then scrolls internally. */
 .draftWell {
+  display: block;
   width: 100%;
-  min-height: 66px;
-  resize: vertical;
-  padding: 11px 13px;
+  resize: none;
+  max-height: 96px;
+  overflow-y: auto;
+  padding: 9px 13px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--accent-soft);
   color: var(--ink);
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.45;
   transition: border-color var(--dur) var(--ease);
 }
 
@@ -527,26 +567,34 @@
   border-color: var(--accent);
 }
 
+/* Chips left, actions right — one row that wraps gracefully at narrow widths. */
+.draftControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+
 .draftChips {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
-  margin: 10px 0 14px;
+  min-width: 0;
 }
 
 .draftActions {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.draftActionsSpacer {
-  flex: 1;
+  flex-wrap: wrap;
 }
 
 /* The honest approve-result region. */
 .resultRegion {
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .resultRow {
@@ -783,4 +831,78 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* ── Mobile (≤768px): single-pane flow ───────────────────────────────────────
+   One pane at a time: the triage list, or (when ?c= is set) the thread. The
+   docked rail is already gone below 1100px; Context lives in the full-width
+   sheet. The cockpit's negative margin must match the shell's phone padding
+   (20px vertical / 16px horizontal) so it fills the column without over-pulling. */
+@media (max-width: 768px) {
+  .cockpit {
+    grid-template-columns: 1fr;
+    margin: -20px -16px;
+    height: calc(100vh - var(--topbar-h));
+  }
+
+  /* List view: show only the triage pane. Thread view: show only the thread. */
+  .cockpit[data-mobile-view='list'] .threadPane {
+    display: none;
+  }
+
+  .cockpit[data-mobile-view='thread'] .triagePane {
+    display: none;
+  }
+
+  /* Reveal the back chevron in the thread header. */
+  .threadBack {
+    display: inline-flex;
+  }
+
+  /* Context sheet spans (nearly) the full width on phones. */
+  .sheet {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  /* DraftCard actions stack full-width; each button fills its row. */
+  .draftControls {
+    align-items: stretch;
+  }
+
+  .draftActions {
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+
+  .draftActions > * {
+    flex: 1;
+  }
+
+  /* Triage rows keep a comfortable tap target. */
+  .triageRow {
+    padding: 14px 16px;
+  }
+
+  /* Thread header on a phone: back + avatar + a single-line name + Context.
+     The status pill and the phone/local-time sub are redundant here (both live
+     in the Context sheet) and made the header wrap into three colliding lines. */
+  .threadHead {
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .threadHeadPill {
+    display: none;
+  }
+
+  .threadHeadSub {
+    display: none;
+  }
+
+  .threadHeadName {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }

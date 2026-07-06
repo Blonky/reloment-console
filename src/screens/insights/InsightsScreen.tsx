@@ -53,26 +53,34 @@ function kindTone(kind: string): { tone: StatusTone; label: string } {
   return { tone: 'neutral', label: kind.replaceAll('_', ' ') };
 }
 
-function Hero({ pulse }: { pulse: HomePulse | undefined }) {
+function HeroCard({ pulse }: { pulse: HomePulse | undefined }) {
   return (
-    <div className={styles.hero}>
-      <span className={styles.heroLabel}>Recovered revenue</span>
-      {pulse === undefined ? (
-        <Skeleton width={180} height={46} />
-      ) : (
-        <span className={`${styles.heroValue} tnum`}>{fullDollars(pulse.wonBackCents)}</span>
-      )}
-      <span className={styles.heroSub}>
-        Causally-attributed only — we count nothing we can&rsquo;t prove.
-      </span>
-    </div>
+    <Card className={styles.heroCard}>
+      <div className={styles.hero}>
+        <span className={styles.heroLabel}>Recovered revenue</span>
+        {pulse === undefined ? (
+          <Skeleton width={160} height={44} />
+        ) : (
+          <span className={`${styles.heroValue} tnum`}>{fullDollars(pulse.wonBackCents)}</span>
+        )}
+        <span className={styles.heroSub}>
+          Causally-attributed only — we count nothing we can&rsquo;t prove.
+        </span>
+      </div>
+    </Card>
   );
 }
 
 function ChartCard({ loading, series }: { loading: boolean; series: MonthPoint[] }) {
   return (
-    <Card title="Recovered by month">
-      {loading ? <Skeleton width="100%" height={200} /> : <RecoveredChart series={series} />}
+    <Card title="Recovered by month" className={styles.chartCard}>
+      {loading ? (
+        <Skeleton width="100%" height={200} />
+      ) : (
+        <div className={styles.chartWrap}>
+          <RecoveredChart series={series} />
+        </div>
+      )}
     </Card>
   );
 }
@@ -124,7 +132,8 @@ function Ledger({
   const total = rows.reduce((acc, r) => acc + r.amount_cents, 0);
 
   return (
-    <Card title="Outcome ledger" padded={false}>
+    <Card title="Outcome ledger" padded={false} className={styles.ledgerCard}>
+      <div className={styles.ledgerScroll}>
       <div className={styles.tableScroll}>
       <Table>
         <THead>
@@ -164,6 +173,7 @@ function Ledger({
         </TBody>
       </Table>
       </div>
+      </div>
       <p className={styles.ledgerNote}>
         Only causally-attributed outcomes are counted — no modeled or assumed revenue.
       </p>
@@ -183,17 +193,16 @@ export default function InsightsScreen() {
         <p className={styles.sub}>What the agents recovered — proven, not projected.</p>
       </header>
 
-      <Card>
-        <div className={styles.heroRow}>
-          <Hero pulse={home.error !== undefined ? undefined : home.data} />
-        </div>
-      </Card>
+      {/* Top row: hero recovered card (1fr) | chart card (2fr, ≤240px tall). */}
+      <div className={styles.topGrid}>
+        <HeroCard pulse={home.error !== undefined ? undefined : home.data} />
+        <ChartCard
+          loading={outcomes.loading || home.loading}
+          series={deriveSeries(outcomes.data ?? [], client.now())}
+        />
+      </div>
 
-      <ChartCard
-        loading={outcomes.loading || home.loading}
-        series={deriveSeries(outcomes.data ?? [], client.now())}
-      />
-
+      {/* Ledger fills the rest and scrolls internally if it must. */}
       <Ledger
         loading={outcomes.loading}
         error={outcomes.error !== undefined}

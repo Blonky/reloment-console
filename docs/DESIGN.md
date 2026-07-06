@@ -176,6 +176,30 @@ Depth = paper vs white + soft shadow, never hard lines everywhere.
   "Demo data" pill + status dot pill. Kill-switch band stays a full red band.
 - Content `max-width: 1360px`, page padding 40px, 8px grid.
 
+### Screen discipline (hard rules)
+
+- **Every primary screen fits its viewport.** Full-height surfaces (Home idle,
+  Inbox, Insights) never scroll the page at desktop sizes; only designated
+  inner regions scroll. If a screen needs the page to scroll to reach its
+  primary action, the layout is wrong.
+- **No decorative chrome.** If a label, kicker, or pane header repeats what
+  the topbar or context already says, delete it. Every element on screen must
+  earn its place.
+
+### Mobile (≤ 768px)
+
+The console must be *presentable and usable* on a phone (~390px):
+- Sidebar disappears; the topbar gains the wordmark + a hamburger that opens a
+  slide-in drawer (shadow-float, scrim, Escape/scrim closes) with the same nav
+  pills + tenant block.
+- Home: greeting clamps smaller, composer full-width, stat cards 2×2,
+  Signals stacks. Idle may scroll on phones (the one-viewport rule is
+  desktop-only).
+- Inbox becomes a single-pane flow: triage list full-width → selecting a
+  thread shows the thread full-width with a back chevron in its header;
+  Context stays behind the existing sheet toggle.
+- Tables scroll horizontally inside their cards; tap targets ≥ 40px.
+
 ### Cards & surfaces
 
 - Default card: `--surface`, 1px `--line`, `--radius-lg`, `--shadow-soft`,
@@ -242,12 +266,26 @@ column on paper; the page breathes. Two states:
 4. Footer line, tiny, ink-2, centered: "Deterministic router today — the
    language-model planner ships with the platform connection."
 
-**Active state (≥1 turn):** the greeting collapses away; the transcript takes
-the centered column (user turns right in accent-soft pills, replies as reply
-cards — unchanged behavior), the composer card docks pinned at the bottom of
-the viewport (sticky within the column, shadow-float lifting it off the page),
-and the analytics band tucks BELOW the transcript (still reachable by scroll —
-the numbers still live-update after enroll/kill commands). aria-live intact.
+**Active state (≥1 turn):** a NORMAL CHAT INTERFACE — nothing else. The
+greeting and the analytics band leave entirely; the transcript owns the column
+(user turns right in accent-soft pills, replies as reply cards) and the
+composer docks at the bottom. The only non-chat element is a single slim
+**pulse strip** above the transcript: one quiet line of inline pills —
+"Needs your eyes 4 · Running 6 · Recovered $4,120" — that live-updates after
+enroll/kill commands (this preserves the demo moment without dashboard
+clutter). aria-live intact.
+
+**The idle→active transition is a feature:** wrap the first-turn state change
+in `document.startViewTransition()` when available (with
+`view-transition-name: home-composer` on the composer card so it MORPHS from
+center-stage to the bottom dock; the greeting fades/rises away). Fallback
+browsers get a 200ms CSS ease — never a hard cut.
+
+**Fits one viewport (hard rule):** the idle state must fit within the viewport
+with NO page scroll at ≥ 720px viewport height: compact stat cards (value
+~24px, padding 14–16), Signals compressed to at most three single-line rows,
+greeting size clamps down (`clamp(28px, 3.2vw, 40px)`), and flexible spacers
+absorb the slack. Below 720px height, graceful scroll is acceptable.
 
 No topbars-within-cards, no channel chrome ("Command channel" head bar is
 gone) — the surface IS the channel. The kill-switch red band stays in the
@@ -280,9 +318,10 @@ shell topbar.
 - **Agents**: roster of line agents — line number, autonomy ceiling
   (draft-only → approved-send → bounded-auto shown as a labeled ladder, current
   rung highlighted), registration status, playbooks attached.
-- **Insights**: recovered revenue (big number + hand-rolled monthly bar SVG),
-  outcome ledger table (each row: contact, playbook, outcome, $), honesty
-  note: "only causally-attributed outcomes are counted."
+- **Insights**: ONE viewport, no page scroll at ≥ 800px height — top row is a
+  two-card grid (hero recovered number card 1fr | monthly bar chart card 2fr,
+  chart ≤ 240px tall), ledger below with its own internal scroll if it must.
+  Honesty note: "only causally-attributed outcomes are counted."
 - **Trust & Settings**: kill switch (big, with typed confirm), opt-out ledger
   (read-only, "never texted again"), audit trail sample (hash-chained rows:
   time, action, reason), data & compliance blurb.

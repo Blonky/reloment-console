@@ -35,3 +35,97 @@
   display: flex;
   flex-direction: column;
 }
+
+/* ── Mobile (≤768px) ────────────────────────────────────────────────────────
+   The sidebar column collapses; the single content column spans full width.
+   Padding tightens to phone margins. Nav moves into the slide-in drawer. */
+@media (max-width: 768px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .content {
+    padding: 20px 16px;
+  }
+}
+
+/* ── Mobile nav drawer ──────────────────────────────────────────────────── */
+.drawerScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(28, 27, 23, 0.28);
+  animation: shell-scrim-in var(--dur) var(--ease);
+}
+
+@keyframes shell-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 41;
+  width: 280px;
+  max-width: 88vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  box-shadow: var(--shadow-float);
+  padding: 16px 14px;
+  animation: shell-drawer-in var(--dur) var(--ease);
+}
+
+@keyframes shell-drawer-in {
+  from {
+    transform: translateX(-16px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.drawerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 8px 16px;
+}
+
+.drawerWordmark {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 520;
+  letter-spacing: -0.01em;
+  color: var(--accent);
+}
+
+.drawerClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.drawerClose:hover {
+  background: rgba(28, 27, 23, 0.05);
+  color: var(--ink);
+}

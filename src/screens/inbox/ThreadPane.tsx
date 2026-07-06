@@ -31,6 +31,9 @@ export interface ThreadPaneProps {
   // Opens the context sheet — the button is CSS-hidden above 1100px, where the
   // rail is docked in the grid instead.
   onOpenContext: () => void;
+  // Mobile back chevron: clears ?c= to return to the triage list. CSS-hidden
+  // above 768px, where both panes are visible side by side.
+  onBack: () => void;
 }
 
 // Small info glyph for the "Context" toggle button (shown <1100px).
@@ -39,6 +42,13 @@ const ContextIcon = (
     <circle cx="8" cy="8" r="6" />
     <path d="M8 7.5v3" />
     <path d="M8 5.2v0.2" />
+  </svg>
+);
+
+// Back chevron for the mobile single-pane flow (shown ≤768px).
+const BackIcon = (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M11 4l-5 5 5 5" />
   </svg>
 );
 
@@ -125,6 +135,7 @@ export default function ThreadPane({
   onEdit,
   onTakeover,
   onOpenContext,
+  onBack,
 }: ThreadPaneProps) {
   const client = useClient();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -141,6 +152,14 @@ export default function ThreadPane({
     return (
       <section className={`${styles.pane} ${styles.threadPane}`} aria-label="Conversation">
         <div className={styles.threadHead}>
+          <button
+            type="button"
+            className={styles.threadBack}
+            onClick={onBack}
+            aria-label="Back to inbox"
+          >
+            {BackIcon}
+          </button>
           <Skeleton width={32} height={32} radius="999px" />
           <div className={styles.threadHeadMain}>
             <Skeleton width={140} height={13} />
@@ -164,6 +183,14 @@ export default function ThreadPane({
   return (
     <section className={`${styles.pane} ${styles.threadPane}`} aria-label="Conversation">
       <div className={styles.threadHead}>
+        <button
+          type="button"
+          className={styles.threadBack}
+          onClick={onBack}
+          aria-label="Back to inbox"
+        >
+          {BackIcon}
+        </button>
         <Avatar name={conversation.display_name} size="md" />
         <div className={styles.threadHeadMain}>
           <span className={styles.threadHeadName}>{conversation.display_name}</span>
@@ -172,13 +199,15 @@ export default function ThreadPane({
           </span>
         </div>
         <span className={styles.threadHeadSpacer} />
-        {detail.optedOut ? (
-          <StatusPill tone="block">Opted out</StatusPill>
-        ) : conversation.controller === 'human' ? (
-          <StatusPill tone="info">You have this thread</StatusPill>
-        ) : (
-          <StatusPill tone="neutral">Agent handling</StatusPill>
-        )}
+        <span className={styles.threadHeadPill}>
+          {detail.optedOut ? (
+            <StatusPill tone="block">Opted out</StatusPill>
+          ) : conversation.controller === 'human' ? (
+            <StatusPill tone="info">You have this thread</StatusPill>
+          ) : (
+            <StatusPill tone="neutral">Agent handling</StatusPill>
+          )}
+        </span>
         <button
           type="button"
           className={styles.contextToggle}

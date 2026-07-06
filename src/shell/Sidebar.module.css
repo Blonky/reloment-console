@@ -99,3 +99,10 @@
   font-size: 11px;
   color: var(--ink-2);
 }
+
+/* ── Mobile (≤768px): the docked sidebar is hidden; nav lives in the drawer. ── */
+@media (max-width: 768px) {
+  .sidebar {
+    display: none;
+  }
+}

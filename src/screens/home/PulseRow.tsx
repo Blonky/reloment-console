@@ -1,13 +1,16 @@
-// Home analytics band (DESIGN.md §5) — four stat cards + a wide Signals card.
+// Home pulse surfaces (DESIGN.md §5).
 //
-// The stats read from client.home() and are refetched after any command that
-// changes state, so they visibly react to a command (the demo moment). Signals
-// are *derived and factual*, computed from the same governed reads the command
-// surface uses — never invented. Each carries a quiet action that dispatches the
-// corresponding command into the surface.
+// Idle: the AnalyticsBand — four compact stat cards + a slim Signals card
+// (at most three single-line rows, action link inline at the end of each line).
+// Active: the PulseStrip — one quiet line of inline pill stats above the
+// transcript, live-updating after enroll/kill commands. No dashboard clutter.
+//
+// Signals are *derived and factual*, computed from the same governed reads the
+// command surface uses — never invented. Each carries a quiet action that
+// dispatches the corresponding command into the surface.
 
 import { Link } from 'react-router-dom';
-import { Card, Skeleton } from '../../components/index.ts';
+import { Skeleton } from '../../components/index.ts';
 import type { BookRow, Contact, HomePulse } from '../../data/types.ts';
 import styles from './HomeScreen.module.css';
 
@@ -38,16 +41,13 @@ export function deriveSignals(contacts: Contact[], lapsed: BookRow[]): Signal[] 
     out.push({
       tone: 'hold',
       text: `${eligibleWinback.length} win-back ${
-        eligibleWinback.length === 1 ? 'candidate is' : 'candidates are'
-      } past the 60-day window and eligible to re-engage.`,
+        eligibleWinback.length === 1 ? 'candidate' : 'candidates'
+      } past the 60-day window, eligible to re-engage.`,
       action: { label: 'Enroll win-back', command: 'Enroll win-back' },
     });
   }
 
   // 2) Threads routed to a licensed human — advice-adjacent, awaiting a reply.
-  //    In the Hartley book this is Marcus (coverage-limit question). We surface
-  //    it factually without hard-coding the name by checking the queue-shaped
-  //    "routed" contacts — the brief command opens the story.
   const routed = contacts.filter(
     (c) => c.lob !== null && c.policy_status === 'new_lead' && c.consents.length === 1,
   );
@@ -55,9 +55,12 @@ export function deriveSignals(contacts: Contact[], lapsed: BookRow[]): Signal[] 
     out.push({
       tone: 'info',
       text: `${routed.length} ${
-        routed.length === 1 ? 'thread is' : 'threads are'
+        routed.length === 1 ? 'thread' : 'threads'
       } routed to a licensed human, awaiting a reply.`,
-      action: { label: `Brief me on ${routed[0].display_name.split(' ')[0]}`, command: `Brief me on ${routed[0].display_name.split(' ')[0]}` },
+      action: {
+        label: `Brief me on ${routed[0].display_name.split(' ')[0]}`,
+        command: `Brief me on ${routed[0].display_name.split(' ')[0]}`,
+      },
     });
   }
 
@@ -67,7 +70,7 @@ export function deriveSignals(contacts: Contact[], lapsed: BookRow[]): Signal[] 
     out.push({
       tone: 'ok',
       text: `${optedOut.length} ${
-        optedOut.length === 1 ? 'contact has' : 'contacts have'
+        optedOut.length === 1 ? 'contact' : 'contacts'
       } opted out — permanently excluded from every send.`,
     });
   }
@@ -75,9 +78,9 @@ export function deriveSignals(contacts: Contact[], lapsed: BookRow[]): Signal[] 
   return out.slice(0, 3);
 }
 
-// A stat card — label (11px uppercase ink-2) / Fraunces value / 12px sub. `to`
-// makes the whole card a hover-lift link; `valueOk` tints the value (Recovered
-// only, the single colored number in the band).
+// A compact stat card — label (11px uppercase ink-2) / Fraunces value / 11px
+// sub. `to` makes the whole card a hover-lift link; `valueOk` tints the value
+// (Recovered only, the single colored number in the band).
 function Stat({
   label,
   value,
@@ -110,6 +113,7 @@ function Stat({
   return <div className={styles.statCard}>{inner}</div>;
 }
 
+// ── Idle: the analytics band (stat cards + slim Signals card) ─────────────────
 export function AnalyticsBand({
   pulse,
   signals,
@@ -127,9 +131,9 @@ export function AnalyticsBand({
         {!pulse ? (
           [0, 1, 2, 3].map((i) => (
             <div className={styles.statCard} key={i}>
-              <Skeleton width={90} height={11} />
-              <div style={{ height: 8 }} />
-              <Skeleton width={64} height={30} />
+              <Skeleton width={80} height={11} />
+              <div style={{ height: 6 }} />
+              <Skeleton width={52} height={22} />
             </div>
           ))
         ) : (
@@ -137,38 +141,38 @@ export function AnalyticsBand({
             <Stat
               label="Needs your eyes"
               value={String(pulse.needsYourEyes)}
-              sub="drafts & routed threads"
+              sub="drafts & routed"
               to="/inbox"
             />
             <Stat
-              label="Conversations running"
+              label="Running"
               value={String(pulse.conversationsRunning)}
               sub="active threads"
             />
             <Stat
-              label="Renewals next 30d"
+              label="Renewals 30d"
               value={String(pulse.renewalsNext30d)}
               sub="up for renewal"
             />
             <Stat
               label="Recovered"
               value={dollars(pulse.wonBackCents)}
-              sub="causally attributed"
+              sub="attributed"
               valueOk
             />
           </>
         )}
       </div>
 
-      <Card title="Signals" className={styles.signalsCard}>
+      {/* Slim Signals card — at most three single-line rows, action inline. */}
+      <div className={styles.signalsCard}>
         {signalsLoading ? (
           <div className={styles.signals}>
-            <Skeleton height={14} />
-            <Skeleton height={14} width="80%" />
-            <Skeleton height={14} width="60%" />
+            <Skeleton height={13} />
+            <Skeleton height={13} width="70%" />
           </div>
         ) : signals.length === 0 ? (
-          <p className={styles.muted}>Nothing needs your attention right now.</p>
+          <p className={styles.signalEmpty}>Nothing needs your attention right now.</p>
         ) : (
           <div className={styles.signals}>
             {signals.map((s, i) => (
@@ -182,23 +186,49 @@ export function AnalyticsBand({
                         : ''
                   }`}
                 />
-                <span className={styles.signalBody}>
-                  <span className={styles.signalText}>{s.text}</span>
-                  {s.action && (
-                    <button
-                      type="button"
-                      className={styles.signalAction}
-                      onClick={() => onRun(s.action!.command)}
-                    >
-                      {s.action.label} →
-                    </button>
-                  )}
-                </span>
+                <span className={styles.signalText}>{s.text}</span>
+                {s.action && (
+                  <button
+                    type="button"
+                    className={styles.signalAction}
+                    onClick={() => onRun(s.action!.command)}
+                  >
+                    {s.action.label} →
+                  </button>
+                )}
               </div>
             ))}
           </div>
         )}
-      </Card>
+      </div>
+    </div>
+  );
+}
+
+// ── Active: the slim pulse strip ──────────────────────────────────────────────
+// One quiet line of inline pill stats above the transcript. Live-updates after
+// enroll/kill commands (the demo moment) without any dashboard chrome.
+export function PulseStrip({ pulse }: { pulse: HomePulse | undefined }) {
+  if (pulse === undefined) {
+    return (
+      <div className={styles.pulseStrip} aria-hidden="true">
+        <Skeleton width={280} height={16} radius="999px" />
+      </div>
+    );
+  }
+  return (
+    <div className={styles.pulseStrip}>
+      <Link to="/inbox" className={`${styles.pulsePill} ${styles.pulsePillLink}`}>
+        Needs your eyes <b className="tnum">{pulse.needsYourEyes}</b>
+      </Link>
+      <span className={styles.pulseDivider} />
+      <span className={styles.pulsePill}>
+        Running <b className="tnum">{pulse.conversationsRunning}</b>
+      </span>
+      <span className={styles.pulseDivider} />
+      <span className={styles.pulsePill}>
+        Recovered <b className={`${styles.pulseOk} tnum`}>{dollars(pulse.wonBackCents)}</b>
+      </span>
     </div>
   );
 }
