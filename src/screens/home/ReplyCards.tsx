@@ -849,7 +849,7 @@ export function NavigateMissReply({
       meta={meta}
     >
       <p className={styles.narrationFollow}>
-        I can open the Inbox, Contacts, Agent, Insights, or Trust &amp; Settings —
+        I can open the Inbox, Contacts, Agent, Insights, or Settings —
         or any contact by name.
       </p>
     </ReplyShell>

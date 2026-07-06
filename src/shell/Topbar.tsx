@@ -50,8 +50,8 @@ export default function Topbar({ title, mode, killSwitch, onOpenPalette, onOpenN
         </div>
         <div className={styles.pausedRight}>
           <span className={styles.pausedText}>All sending paused</span>
-          <Link to="/trust" className={styles.resumeLink}>
-            Resume in Trust &amp; Settings
+          <Link to="/settings" className={styles.resumeLink}>
+            Resume in Settings
           </Link>
         </div>
       </header>
@@ -79,9 +79,9 @@ export default function Topbar({ title, mode, killSwitch, onOpenPalette, onOpenN
         <Notifications />
         {mode === 'demo' && <DemoControls />}
         <Link
-          to="/trust"
+          to="/settings"
           className={styles.sending}
-          aria-label="Sending active — open Trust & Settings"
+          aria-label="Sending active — open Settings"
         >
           <span className={styles.dot} />
           Sending active

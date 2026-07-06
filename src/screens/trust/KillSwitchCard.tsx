@@ -3,7 +3,10 @@ import { Card, Button } from '../../components/index.ts';
 import { useClient, useKillSwitch } from '../../shell/ClientContext.tsx';
 import styles from './KillSwitchCard.module.css';
 
-export default function KillSwitchCard() {
+// `compact` (r13) renders the safety control as a single hairline strip — status
+// dot + label + Pause/Resume — for the top of the Settings page (admin framing,
+// no big card frame). The typed-confirm safety step is preserved either way.
+export default function KillSwitchCard({ compact = false }: { compact?: boolean }) {
   const client = useClient();
   const { killSwitch, setKillSwitch } = useKillSwitch();
 
@@ -36,6 +39,64 @@ export default function KillSwitchCard() {
       setConfirming(false);
       setTyped('');
     }
+  }
+
+  if (compact) {
+    return (
+      <div
+        className={`${styles.strip} ${killSwitch ? styles.stripPaused : styles.stripLive}`}
+        title={
+          killSwitch
+            ? 'No outbound message will leave the line until you resume.'
+            : 'The agent may send within its ceilings; every send still runs the gate. The kill switch stops all outbound sending instantly.'
+        }
+      >
+        <span className={styles.stripStatus}>
+          <span className={`${styles.dot} ${killSwitch ? styles.dotPaused : styles.dotLive}`} />
+          <span className={styles.stripHead}>
+            {killSwitch ? 'All sending paused' : 'Sending is live'}
+          </span>
+          <span className={styles.stripSub}>
+            {killSwitch ? 'Resume to let the gate send again.' : 'Every send still runs the gate.'}
+          </span>
+        </span>
+
+        {!confirming ? (
+          <Button variant={nextOn ? 'danger' : 'primary'} size="sm" onClick={beginConfirm}>
+            {nextOn ? 'Pause all sending' : 'Resume sending'}
+          </Button>
+        ) : (
+          <div className={styles.confirmRow}>
+            <input
+              id="killswitch-confirm"
+              className={styles.input}
+              type="text"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder={`Type ${requiredWord}`}
+              autoComplete="off"
+              autoFocus
+              aria-label={`Type ${requiredWord} to confirm`}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void commit();
+                if (e.key === 'Escape') cancel();
+              }}
+            />
+            <Button
+              variant={nextOn ? 'danger' : 'primary'}
+              size="sm"
+              disabled={!matches || busy}
+              onClick={() => void commit()}
+            >
+              {nextOn ? 'Pause' : 'Resume'}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={cancel} disabled={busy}>
+              Cancel
+            </Button>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (

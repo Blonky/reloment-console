@@ -33,17 +33,26 @@ dignity as a success state.
 
 ## 2. Surfaces (6)
 
+Main nav (top of sidebar): **Home / Inbox / Contacts / Agent / Insights**.
+**Settings** is admin, not an operating surface — it sits on a quiet row pinned at
+the bottom of the sidebar (gear glyph), directly above the tenant card, and in the
+mobile drawer in the same spot. So the bottom stack, below the Chats section, is:
+Settings row → tenant card.
+
 | Route | Surface | Depth (this milestone) |
 |---|---|---|
 | `/` | **Home** — command channel + pulse | Full |
 | `/inbox` | **Inbox** — approval cockpit | Full (hero) |
 | `/contacts` | Contacts + memory board | Structured skeleton |
-| `/agent` | **Agent** — profile + flows + guardrails (Campaigns + Agents merged, r10) | Structured skeleton |
+| `/agent` | **Agent** — Overview / Voice / Knowledge (editable brain, r13) | Full (editable) |
 | `/insights` | Outcomes / recovered revenue | Structured skeleton |
-| `/trust` | Trust & Settings — kill switch, opt-outs, audit | Structured skeleton |
+| `/settings` | **Settings** — safety strip, Connections marketplace, ledgers (r13) | Full |
 
 r10: the old `/campaigns` and `/agents` routes redirect to `/agent`. There is ONE
 agent per business (Intercom-Fin shape), so a "roster of agents" no longer exists.
+r13: **Trust & Settings → Settings** — the surface moved out of the main nav to the
+sidebar-bottom Settings row, the route is `/settings`, and `/trust` redirects to it
+(`Navigate replace`) so old deep links keep working.
 
 "Structured skeleton" = real layout, real demo data, real design system — but
 read-only and shallow. Never a "coming soon" placeholder; every screen must look
@@ -549,9 +558,44 @@ real session storage + a language-model planner; the `HttpClient` methods map
   sync, conversations, carrier lookup) with what it contributes and when it
   last updated. First-party enrichment only; cold-lead enrichment is
   deliberately out of scope (the consent gate is the product).
-- **Agent** (r10 — Campaigns + Agents merged into one surface): there is **ONE
-  agent per business** that switches roles across flows (Intercom-Fin shape), not
-  a roster of separate bots. Three parts, all warm and plain-language:
+- **Agent** (r13 — an editable knowledge-base workspace; r10 merged Campaigns +
+  Agents): there is **ONE agent per business** that switches roles across flows
+  (Intercom-Fin shape), not a roster of separate bots. A quiet **segmented control**
+  under the page title splits it into three **one-viewport** segments (each scrolls
+  internally; the segments stack full-width on phones):
+
+  - **Overview** — the read-only identity card + flows + guardrails (the r10 content
+    below, unchanged). The **compliance guardrails stay here and stay immutable** —
+    they are rules, not knowledge.
+  - **Voice** (`agentVoice(): Promise<AgentVoice>` = `{ name; traits[]; instructions }`;
+    `updateAgentVoice(patch)` accepts a partial). Editable agent **name** (an inline
+    input styled as the display heading on focus), **traits** as editable chips
+    (click-to-edit inline, ✕ to remove, a "+ trait" ghost chip to add, **max 6**,
+    each ≤60 chars), and **"House style"** — a labeled textarea (≤2000 chars, count
+    shown quietly) with the helper "Plain-language instructions your agent
+    follows…". Below: the before/after example whose tuned side reads **"Your
+    agent"**. **Autosave on blur** with a quiet **"Saved" wisp** — no Save button
+    ceremony. Edits flow through `updateAgentVoice`; because `agentProfile()` and
+    `toneProfile()` **read the same voice store**, the edited name + traits appear
+    on the Overview identity card immediately (the demo proves training changes the
+    agent). The drafting bodies keep their templates; what visibly moves is the
+    agent's stated identity.
+  - **Knowledge** (`knowledgeDocs()` + `createKnowledgeDoc` / `updateKnowledgeDoc` /
+    `deleteKnowledgeDoc`; `KnowledgeDoc = { id; kind:'company'|'rules'|'faq'|'file';
+    title; body; filename?; size_bytes?; updated_at }`). A **Sauna-memory-style**
+    list: a left column of doc cards **grouped by kind** (Company / House rules /
+    FAQs / Files) each with title + one-line preview + updated-at (tnum); clicking
+    opens an **inline editor panel** on the right (title input + body textarea +
+    Delete ghost; **autosave on blur**). A **"+ Add"** per group (and **"Add file"**
+    for Files). Empty groups show one quiet line. A single quiet caption at the top:
+    "Everything here is folded into your agent's context — it drafts with what you
+    teach it." **Honesty rule:** `file` entries are a demo affordance — "Add file"
+    records a filename + size and labels the entry **"indexed"** (no real upload or
+    parse); company/rules/faq are inline-editable prose. Persisted to localStorage
+    (`reloment.demo.agentBrain.v1`) in demo; the platform's `/api/agent/voice` +
+    `/api/knowledge` routes in production.
+
+  The r10 three-part Overview content, unchanged:
   - **Profile** (`agentProfile(): Promise<AgentProfile>` —
     `{ name; line; trainedOn; traits[]; example{ generic; tuned }; guardrails[] }`).
     The agent's identity card: a simple human name ("Hartley concierge"), the line
@@ -585,13 +629,59 @@ real session storage + a language-model planner; the `HttpClient` methods map
   question max**, **no emojis** in agent sends. (The refusal/system copy — opt-out
   banners, GateReason strings, centered timeline entries — is **UI**, not the
   agent's voice, and is exempt.)
-- **Insights**: ONE viewport, no page scroll at ≥ 800px height — top row is a
-  two-card grid (hero recovered number card 1fr | monthly bar chart card 2fr,
-  chart ≤ 240px tall), ledger below with its own internal scroll if it must.
-  Honesty note: "only causally-attributed outcomes are counted."
-- **Trust & Settings**: kill switch (big, with typed confirm), opt-out ledger
-  (read-only, "never texted again"), audit trail sample (hash-chained rows:
-  time, action, reason), data & compliance blurb.
+- **Insights** (r14 — the **owner's report**): ONE viewport, no page scroll at
+  ≥ 760px height. Not a dashboard of whitespace — a three-beat story top → bottom,
+  every number derived from existing stores (no invented fixture constants). Read
+  via `insightsReport(): Promise<InsightsReport>` (WORK + PIPELINE) plus the
+  existing `home()`/`outcomes()` (PROOF).
+  - **PROOF** — the hero headline "Your agent recovered $X this quarter" +
+    the honesty sub ("only causally-attributed outcomes are counted") on the left,
+    the Recovered-by-month chart (≤200px) on the right, and the outcome ledger
+    below **compacted to a slim quiet table** (the receipt, not the show — it's the
+    flex/scroll region if anything must give). Hero $ = `home().wonBackCents`;
+    chart + ledger derive from `outcomes()`. The hero IS the page head — no
+    "Insights" kicker; PROOF gets no micro-label.
+  - **WORK** — an 11px "What it did" micro-label over a single hairline stat band
+    (no cards-in-cards): Conversations handled · Sent · Held for your review ·
+    Blocked by the gate · Missed calls answered · Median first reply (omitted when
+    null). Derivations (single sources of truth, shared with Home's overnight
+    lines via one `activityCounts()` helper): conversations = live conversation
+    count; sent = audit `message.sent` rows; heldForReview = drafts awaiting
+    approval / routed-to-human (= Home's "Approvals waiting" / the Inbox queue);
+    blockedByGate = `send_gate` audit rows the gate refused; missedCallsAnswered =
+    missed-call auto-acks (0 until the demo fires one — honest); medianFirstReplyMin
+    = median minutes inbound→next outbound `sent` across the store (null if no
+    pairs). Caption: "Counted from the audit record — the same log the Settings
+    ledger shows." The band is **live** (subscribes to the feed) — a simulated
+    missed call ticks Missed calls answered 0→1.
+  - **PIPELINE** — an 11px "What it's setting up" micro-label over three quiet
+    columns (the Home briefing band idiom): **Renewals · next 30 days** (name +
+    "in N days"; contacts with x_date 0–30d), **Reactivation candidates** (name +
+    reason; lapsed_quote contacts with valid marketing consent and not opted out),
+    **Bundle candidates** (name + "Auto only — no home policy"; auto-only ACTIVE
+    customers). Each list caps at 3 with a "+N more"; each name links to their
+    thread (`/inbox?c=…`) or the contacts book. Empty column → "None right now."
+- **Settings** (r13 — business-admin, off the main nav): page title "Settings",
+  one quiet sub-line. This is an admin page, so **natural page scroll is fine**
+  (exempt from one-viewport). Section order:
+  1. a **compact safety strip** at top — the kill switch as one hairline row (status
+     dot + "Sending is live" + Pause button; the explainer moves into the row's
+     title tooltip / one small line). The typed-confirm safety step is preserved.
+  2. **Connections marketplace** (the dominant section) —
+     `connectionsCatalog(): Promise<{ connected: ConnectionRow[]; available:
+     { key; name; blurb; requested? }[] }>` + `requestConnection(key, note?):
+     Promise<{ ok:true }>`. Two groups in one card: **Connected** (the existing wires
+     — status dot, name, detail, what it powers) and **Available** — a tight 2-col
+     grid (1-col ≤900px) of native surfaces (Salesforce, HubSpot, Slack, NowCerts,
+     HawkSoft, and a **Custom** "bring your own MCP or API" row) each with a **ghost
+     Request** button → an **optimistic swap** to a quiet "Requested — wired during
+     onboarding" state. The Custom row opens a one-line note input first. **No fake
+     OAuth ceremony** — honest FDE framing: requests are recorded (localStorage in
+     demo: `reloment.demo.connectionRequests.v1`; `POST /api/connections/request` in
+     production) and wired during onboarding. The requested state persists across
+     reload.
+  3. **Ledgers** — opt-out ledger (read-only, "never texted again"), audit trail
+     sample (hash-chained rows: time, action, reason), data & compliance blurb.
 
 ## 7. Operations features (round 7)
 

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
-import Sidebar, { SidebarNav, SidebarSearch, SidebarChats, TenantCard } from './Sidebar.tsx';
+import Sidebar, {
+  SidebarNav,
+  SidebarSearch,
+  SidebarChats,
+  SettingsRow,
+  TenantCard,
+} from './Sidebar.tsx';
 import Topbar from './Topbar.tsx';
 import CommandPalette from './CommandPalette.tsx';
 import { LiveDataProvider } from './LiveData.tsx';
@@ -115,6 +121,7 @@ export default function AppShell({ killSwitch, mode, title, children }: AppShell
               />
               <SidebarNav onNavigate={closeNav} />
               <SidebarChats onNavigate={closeNav} />
+              <SettingsRow onNavigate={closeNav} />
               <TenantCard />
             </nav>
           </>

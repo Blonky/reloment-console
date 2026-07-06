@@ -1,13 +1,12 @@
-/* One viewport, no page scroll (≥720px tall): a definite-height flex column.
-   Profile + guardrails are fixed; the flows list takes the slack and scrolls
-   internally if it must. We pin BOTH height and max-height so the column can
-   never grow past the viewport budget — that's what forces the flows list to
-   scroll instead of the page (the shell's .content is min-height:100% and would
-   otherwise let a flex:1 child stretch to fit its content). */
+/* One viewport per SEGMENT (r13): the page is a definite-height flex column —
+   a fixed header (title + segmented control) over a segment body that fills the
+   remaining budget. Each segment scrolls internally, so the page never scrolls
+   at desktop sizes. Pinning height AND max-height is what forces the inner
+   region to scroll instead of the page. */
 .page {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   min-height: 0;
   height: calc(100vh - var(--topbar-h) - 80px);
   max-height: calc(100vh - var(--topbar-h) - 80px);
@@ -20,6 +19,79 @@
     max-height: none;
     min-height: calc(100vh - var(--topbar-h) - 80px);
   }
+}
+
+/* ── Page header: title + segmented control ──────────────────────────────── */
+.pageHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 520;
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* Pill segments — quiet, inset in a surface-2 well. */
+.segments {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+}
+
+.segment {
+  appearance: none;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  padding: 5px 16px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    background var(--dur, 180ms) var(--ease, ease-out),
+    box-shadow var(--dur, 180ms) var(--ease, ease-out),
+    color var(--dur, 180ms) var(--ease, ease-out);
+}
+
+.segment:hover {
+  color: var(--ink);
+}
+
+.segmentActive,
+.segmentActive:hover {
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  color: var(--ink);
+}
+
+/* The segment body fills the remaining height; each segment owns its own scroll. */
+.segmentBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Overview segment — the old one-viewport column (profile/flows/guardrails) ─ */
+.overview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* ── (a) Profile ─────────────────────────────────────────────────────────── */
@@ -374,11 +446,26 @@
     height: auto;
     max-height: none;
   }
+  .overview {
+    min-height: 0;
+  }
   .flows {
     overflow-y: visible;
   }
   .profileTraits {
     margin-left: 0;
     width: 100%;
+  }
+  /* Segments stack cleanly under the title on phones — full-width, even split. */
+  .pageHead {
+    align-items: stretch;
+  }
+  .segments {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .segment {
+    flex: 1;
+    text-align: center;
   }
 }

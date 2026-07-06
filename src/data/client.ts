@@ -7,19 +7,23 @@ import type {
   AgentChatMessage,
   AgentProfile,
   AgentSession,
+  AgentVoice,
   ApproveResult,
   AuditRow,
   BookRow,
   CallListRow,
   CampaignRow,
   ConnectionRow,
+  ConnectionsCatalog,
   Contact,
+  KnowledgeDoc,
   ConversationBrief,
   EnrollResult,
   FeedEvent,
   HomeBriefing,
   HomePulse,
   InboundResult,
+  InsightsReport,
   LineAgent,
   OutcomeRow,
   PlaybookFlow,
@@ -120,6 +124,10 @@ export interface DataClient {
   // Read-model surfaces for the structured-skeleton screens.
   contacts(): Promise<Contact[]>;
   outcomes(): Promise<OutcomeRow[]>;
+  // The owner's report (r14): PROOF (outcomes) / WORK (activity counted from the
+  // audit record) / PIPELINE (renewals, reactivation, bundle candidates from the
+  // book). Every field derives from existing state — no new hardcoded stats.
+  insightsReport(): Promise<InsightsReport>;
   agents(): Promise<LineAgent[]>;
   auditSample(): Promise<AuditRow[]>;
   optOuts(): Promise<Contact[]>;
@@ -136,6 +144,32 @@ export interface DataClient {
   // connects, each with status + what it powers + the detail it provides.
   // Composed from existing fixtures so the grid reads in one call.
   connections(): Promise<ConnectionRow[]>;
+
+  // ── Agent brain (r13) — editable voice + knowledge base ─────────────────────
+  // The Agent tab becomes an editable knowledge surface. voice = the agent's
+  // identity (name, traits, house-style instructions); the demo READS this store
+  // from agentProfile()/toneProfile() so training visibly changes the agent.
+  // updateAgentVoice accepts a partial patch (autosave-on-blur per field). The
+  // knowledge CRUD backs the Sauna-memory-style document list. Maps to the
+  // platform's /api/agent/voice + /api/knowledge routes.
+  agentVoice(): Promise<AgentVoice>;
+  updateAgentVoice(patch: Partial<AgentVoice>): Promise<AgentVoice>;
+  knowledgeDocs(): Promise<KnowledgeDoc[]>;
+  createKnowledgeDoc(
+    doc: Pick<KnowledgeDoc, 'kind' | 'title' | 'body'> &
+      Partial<Pick<KnowledgeDoc, 'filename' | 'size_bytes'>>,
+  ): Promise<KnowledgeDoc>;
+  updateKnowledgeDoc(
+    id: string,
+    patch: Partial<Pick<KnowledgeDoc, 'title' | 'body'>>,
+  ): Promise<KnowledgeDoc>;
+  deleteKnowledgeDoc(id: string): Promise<void>;
+
+  // The Connections marketplace (r13): connected rows (= connections()) plus the
+  // native surfaces available to request. requestConnection records an optimistic
+  // request (localStorage in demo) and returns ok.
+  connectionsCatalog(): Promise<ConnectionsCatalog>;
+  requestConnection(key: string, note?: string): Promise<{ ok: true }>;
 
   // ── Agent workspace (r11) — Home as a real agent chat with sessions ─────────
   // The Home command channel becomes a Manus/Sauna-style workspace: named chat

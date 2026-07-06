@@ -329,6 +329,44 @@
   flex: none;
 }
 
+/* Settings row (r13) — the quiet admin row above the tenant card. Same pill
+   idiom as .link but smaller, dimmer text and a hairline above so it reads as a
+   footer control, not a primary destination. Active = white pill like nav. */
+.settingsRow {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 34px;
+  margin-top: 10px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  transition:
+    background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.settingsRow:hover {
+  background: rgba(28, 27, 23, 0.04);
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.settingsRowActive,
+.settingsRowActive:hover {
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  color: var(--ink);
+}
+
+.settingsRowActive .icon {
+  color: var(--accent);
+}
+
 .footer {
   flex: none;
   padding-top: 12px;

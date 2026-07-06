@@ -1,78 +1,45 @@
-/* One viewport, no page scroll (≥800px tall): a definite-height flex column like
-   Home idle. The content area is 100vh − topbar − 80px (the shell's 40px pad top
-   and bottom). The ledger card takes the slack (flex:1) and scrolls internally. */
+/* The owner's report (r14): one composed story in one viewport, top → bottom —
+   PROOF (hero + chart + the receipt ledger) → WORK (a hairline stat band) →
+   PIPELINE (three quiet columns). A definite-height flex column; the ledger is
+   the only flex/scroll region, so the page itself never scrolls at desktop. */
 .page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   flex: 1;
   min-height: 0;
   height: calc(100vh - var(--topbar-h) - 80px);
 }
 
-/* Below 800px tall: graceful page scroll — never clip. */
-@media (max-height: 799px) {
+/* Below 760px tall: graceful page scroll — never clip. */
+@media (max-height: 759px) {
   .page {
     height: auto;
     min-height: calc(100vh - var(--topbar-h) - 80px);
   }
 }
 
-/* Top grid: hero headline (wider so the sentence reads) | chart. */
-.topGrid {
+/* ── PROOF ────────────────────────────────────────────────────────────────── */
+/* Hero sentence (left) | chart card (right). The hero sits on paper (no card of
+   its own — it IS the headline); only the chart floats. */
+.proof {
   flex: none;
   display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 16px;
-  align-items: stretch;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+  align-items: center;
 }
 
-@media (max-width: 900px) {
-  .topGrid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.heroCard {
-  display: flex;
-  flex-direction: column;
-}
-
-/* Card renders a .body wrapper around children; let it fill the card so the
-   hero can centre vertically against the taller chart card beside it. */
-.heroCard > div:last-child {
-  flex: 1;
-  min-height: 0;
-}
-
-.chartCard {
-  min-width: 0;
-}
-
-/* Cap the SVG height so the chart card never eats the viewport (§6). */
-.chartWrap {
-  max-height: 240px;
-  display: flex;
-}
-
-.chartWrap :global(svg) {
-  max-height: 240px;
-}
-
-/* ── hero ────────────────────────────────────────────────────── */
 .hero {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 10px;
-  height: 100%;
 }
 
-/* The headline sentence — Fraunces, the figure inline in accent-green. */
 .heroHeadline {
   font-family: var(--font-display);
-  font-size: clamp(24px, 2.6vw, 32px);
-  line-height: 1.12;
+  font-size: clamp(24px, 2.6vw, 34px);
+  line-height: 1.1;
   font-weight: 520;
   font-optical-sizing: auto;
   letter-spacing: -0.01em;
@@ -85,28 +52,40 @@
 
 .heroSub {
   font-size: 12.5px;
+  line-height: 1.45;
   color: var(--ink-2);
+  max-width: 44ch;
 }
 
-/* ── ledger ──────────────────────────────────────────────────── */
-/* The ledger fills the column slack and scrolls its rows internally, so the
-   page itself never scrolls. Header (flush) → scroll region → pinned note. */
-.ledgerCard {
+.chartCard {
+  min-width: 0;
+}
+
+/* Cap the SVG height so the chart card never eats the viewport (§6). */
+.chartWrap {
+  max-height: 200px;
+  display: flex;
+}
+
+.chartWrap :global(svg) {
+  max-height: 200px;
+}
+
+/* ── the receipt: outcome ledger ──────────────────────────────────────────── */
+/* Quieter than the show — a slim table on the inset well. It takes the column
+   slack (flex:1) and scrolls its rows internally, so the page never scrolls. */
+.ledger {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
 }
 
-/* Card wraps children in a .body/.bodyFlush div; make it the flex column too. */
-.ledgerCard > div:last-child {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* The vertical scroll region — rows scroll here; the note below stays pinned. */
 .ledgerScroll {
   flex: 1;
   min-height: 0;
@@ -122,7 +101,7 @@
 .ledgerSkeleton {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   padding: 16px;
 }
 
@@ -147,23 +126,169 @@
   background: var(--surface-2);
 }
 
-/* ── Mobile (≤768px): stack the top grid; release the one-viewport lock. ──── */
+/* Micro-label — the 11px kicker each beat gets (PROOF gets none). */
+.microLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+/* ── WORK ─────────────────────────────────────────────────────────────────── */
+.work {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* One hairline band — no cards-in-cards. The stats sit in a row on paper, split
+   by a top/bottom hairline; each stat is a Fraunces number over a quiet label. */
+.workBand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 40px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.statValue {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1;
+  font-weight: 520;
+  font-optical-sizing: auto;
+  color: var(--ink);
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.workCaption {
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+/* ── PIPELINE ─────────────────────────────────────────────────────────────── */
+.pipeline {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pipeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.pipeCol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pipeLabel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.pipeEmpty {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.pipeList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pipeItem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.pipeName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.pipeName:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pipeName:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pipeDetail {
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pipeMore {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+/* ── Narrower desktop: keep the top grid but let it breathe. ─────────────────*/
+@media (max-width: 900px) {
+  .proof {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* ── Mobile (≤768px): stack everything; release the one-viewport lock. ─────── */
 @media (max-width: 768px) {
   .page {
     height: auto;
     min-height: calc(100vh - var(--topbar-h) - 40px);
+    gap: 20px;
   }
 
-  .topGrid {
-    grid-template-columns: 1fr;
-  }
-
-  /* Let the ledger grow naturally with the page scroll instead of an inner box. */
-  .ledgerCard {
+  .ledger {
     flex: none;
   }
 
   .ledgerScroll {
     overflow-y: visible;
+  }
+
+  .workBand {
+    gap: 14px 28px;
+  }
+
+  .pipeGrid {
+    grid-template-columns: 1fr;
+    gap: 18px;
   }
 }

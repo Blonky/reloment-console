@@ -110,3 +110,44 @@
   color: var(--ink);
   font-weight: 600;
 }
+
+/* ── Compact safety strip (r13) — Settings page top row, no card frame ─────── */
+.strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.stripLive {
+  background: var(--surface);
+}
+
+.stripPaused {
+  background: var(--block-soft);
+  border-color: color-mix(in srgb, var(--block) 30%, var(--line));
+}
+
+.stripStatus {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.stripHead {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.stripSub {
+  font-size: 12px;
+  color: var(--ink-2);
+}

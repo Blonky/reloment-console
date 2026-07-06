@@ -9,19 +9,23 @@ import type {
   AgentChatMessage,
   AgentProfile,
   AgentSession,
+  AgentVoice,
   ApproveResult,
   AuditRow,
   BookRow,
   CallListRow,
   CampaignRow,
   ConnectionRow,
+  ConnectionsCatalog,
   Contact,
+  KnowledgeDoc,
   ConversationBrief,
   EnrollResult,
   FeedEvent,
   HomeBriefing,
   HomePulse,
   InboundResult,
+  InsightsReport,
   PlaybookFlow,
   QueueItem,
   ResearchReport,
@@ -337,6 +341,26 @@ export class HttpClient implements DataClient {
   async outcomes(): Promise<OutcomeRow[]> {
     return this.req<OutcomeRow[]>('/api/outcomes').catch(() => []);
   }
+  // The owner's report (r14). Degrades to an empty WORK band + empty PIPELINE when
+  // the route is absent — never faked.
+  async insightsReport(): Promise<InsightsReport> {
+    return this.req<InsightsReport>('/api/insights-report').catch(() => ({
+      activity: {
+        conversations: 0,
+        sent: 0,
+        heldForReview: 0,
+        blockedByGate: 0,
+        missedCallsAnswered: 0,
+        medianFirstReplyMin: null,
+      },
+      pipeline: {
+        renewals30d: [],
+        reactivation: [],
+        bundle: [],
+        more: { renewals30d: 0, reactivation: 0, bundle: 0 },
+      },
+    }));
+  }
   async agents(): Promise<LineAgent[]> {
     return this.req<LineAgent[]>('/api/agents').catch(() => []);
   }
@@ -390,6 +414,68 @@ export class HttpClient implements DataClient {
   // Trust grid degrades honestly (nothing shown as connected without proof).
   async connections(): Promise<ConnectionRow[]> {
     return this.req<ConnectionRow[]>('/api/connections').catch(() => []);
+  }
+
+  // ── Agent brain (r13) — editable voice + knowledge base ─────────────────────
+  // Maps 1:1 to the pinned platform routes. Reads that fail degrade to an honest
+  // untuned/empty state; writes echo the server's response (or a local fallback so
+  // the optimistic UI stands until the next read).
+  async agentVoice(): Promise<AgentVoice> {
+    return this.req<AgentVoice>('/api/agent/voice').catch(() => ({
+      name: 'Your concierge',
+      traits: [],
+      instructions: '',
+    }));
+  }
+
+  async updateAgentVoice(patch: Partial<AgentVoice>): Promise<AgentVoice> {
+    return this.req<AgentVoice>('/api/agent/voice', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    }).catch(() => this.agentVoice());
+  }
+
+  async knowledgeDocs(): Promise<KnowledgeDoc[]> {
+    return this.req<KnowledgeDoc[]>('/api/knowledge').catch(() => []);
+  }
+
+  async createKnowledgeDoc(
+    doc: Pick<KnowledgeDoc, 'kind' | 'title' | 'body'> &
+      Partial<Pick<KnowledgeDoc, 'filename' | 'size_bytes'>>,
+  ): Promise<KnowledgeDoc> {
+    return this.post<KnowledgeDoc>('/api/knowledge', doc);
+  }
+
+  async updateKnowledgeDoc(
+    id: string,
+    patch: Partial<Pick<KnowledgeDoc, 'title' | 'body'>>,
+  ): Promise<KnowledgeDoc> {
+    return this.req<KnowledgeDoc>(`/api/knowledge/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async deleteKnowledgeDoc(id: string): Promise<void> {
+    await this.req<{ ok: boolean }>(`/api/knowledge/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }).catch(() => undefined);
+  }
+
+  // The Connections marketplace — GET the catalog; POST a request. A missing
+  // catalog route degrades to just the connected rows with an empty available
+  // list; a failing request resolves ok so the optimistic UI stands.
+  async connectionsCatalog(): Promise<ConnectionsCatalog> {
+    return this.req<ConnectionsCatalog>('/api/connections/catalog').catch(async () => ({
+      connected: await this.connections(),
+      available: [],
+    }));
+  }
+
+  async requestConnection(key: string, note?: string): Promise<{ ok: true }> {
+    return this.post<{ ok: true }>('/api/connections/request', { key, note }).catch(
+      () => ({ ok: true as const }),
+    );
   }
 
   // ── Agent workspace (r11) — maps to the platform's /api/agent/sessions CRUD ──
@@ -460,7 +546,7 @@ export class HttpClient implements DataClient {
       { match: ['inbox', 'approvals'], label: 'Inbox', href: '/inbox' },
       { match: ['agent', 'flows', 'playbooks'], label: 'Agent', href: '/agent' },
       { match: ['insights', 'revenue'], label: 'Insights', href: '/insights' },
-      { match: ['settings', 'trust', 'connections'], label: 'Trust & Settings', href: '/trust' },
+      { match: ['settings', 'trust', 'connections'], label: 'Settings', href: '/settings' },
       { match: ['contacts', 'book'], label: 'Contacts', href: '/contacts' },
     ];
     const words = q.split(/\s+/);

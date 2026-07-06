@@ -57,10 +57,12 @@ const InsightsIcon = (
   </svg>
 );
 
-const TrustIcon = (
+// Settings is admin (r13), not an operating surface — a gear glyph on the quiet
+// bottom row rather than a primary nav pill.
+const SettingsIcon = (
   <svg width="16" height="16" viewBox="0 0 16 16" {...stroke} className={styles.icon}>
-    <path d="M8 2 13 4v4c0 3-2.2 5-5 6-2.8-1-5-3-5-6V4z" />
-    <path d="M6 8l1.5 1.5L10.5 6.5" />
+    <circle cx="8" cy="8" r="2.25" />
+    <path d="M8 1.5v1.6M8 12.9v1.6M14.5 8h-1.6M3.1 8H1.5M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" />
   </svg>
 );
 
@@ -70,7 +72,6 @@ const ITEMS: NavItem[] = [
   { to: '/contacts', label: 'Contacts', icon: ContactsIcon },
   { to: '/agent', label: 'Agent', icon: AgentIcon },
   { to: '/insights', label: 'Insights', icon: InsightsIcon },
-  { to: '/trust', label: 'Trust & Settings', icon: TrustIcon },
 ];
 
 const TENANT = 'Hartley Insurance Group';
@@ -191,6 +192,27 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         </NavLink>
       ))}
     </div>
+  );
+}
+
+// The quiet Settings row (r13) — pinned at the bottom of the column, directly
+// ABOVE the tenant card. Same nav-row idiom (icon + label, active = white pill)
+// but visually quieter than the primary nav: it lives in the bottom stack, not
+// the nav list, because Settings is admin, not an operating surface.
+export function SettingsRow({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <NavLink
+      to="/settings"
+      onClick={onNavigate}
+      className={({ isActive }) =>
+        isActive
+          ? `${styles.settingsRow} ${styles.settingsRowActive}`
+          : styles.settingsRow
+      }
+    >
+      {SettingsIcon}
+      Settings
+    </NavLink>
   );
 }
 
@@ -339,6 +361,7 @@ export default function Sidebar({
       <SidebarSearch onOpenPalette={onOpenPalette} />
       <SidebarNav />
       <SidebarChats onNavigate={onCloseNav} />
+      <SettingsRow onNavigate={onCloseNav} />
       <TenantCard />
     </nav>
   );

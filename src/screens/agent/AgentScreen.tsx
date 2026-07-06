@@ -1,23 +1,34 @@
-// Agent (r10) — Campaigns + Agents merged into ONE surface (DESIGN.md §6).
-// There is ONE agent per business that switches roles across flows (Intercom-Fin
-// shape), not a roster of bots. Three zones, all warm and plain-language, and
-// the whole thing holds one viewport at ≥720px tall:
+// Agent (r13) — the agent surface becomes an EDITABLE knowledge-base workspace.
+// A quiet segmented control under the page title splits it into three one-viewport
+// segments (each scrolls internally):
 //
-//   (a) PROFILE   — the agent's identity: name, line, what it was trained on, the
-//                   3 traits as inline chips, and the generic-vs-tuned voice
-//                   example (adapted from the old VoiceCard content).
-//   (b) FLOWS     — the heart: one hairline row per playbook flow — name + the
-//                   plain "When … → texts …" sentence + what it does, the
-//                   autonomy as a quiet pill, compact inline stats, and the
-//                   on/off Switch (setPlaybookEnabled, optimistic).
-//   (c) GUARDRAILS— one quiet strip: the 4 fixed rules as short lines with a
-//                   shield glyph. Trust statements, not settings.
+//   Overview  — the read-only identity card + flows + guardrails (r10 content,
+//               unchanged). Compliance guardrails stay here: they are not
+//               knowledge, they are immutable rules.
+//   Voice     — editable name, traits (chips), and a "House style" instructions
+//               textarea. Autosave on blur with a quiet "Saved" wisp. The tuned
+//               example header reads "Your agent" and reflects live edits (name +
+//               traits derive from the voice store via agentProfile()).
+//   Knowledge — a Sauna-memory-style list of editable documents grouped by kind,
+//               with an inline editor panel. Everything here is folded into the
+//               agent's context.
 
+import { useState } from 'react';
 import { useClient } from '../../shell/ClientContext.tsx';
 import { useData } from '../../data/useData.ts';
 import { Skeleton, Switch } from '../../components/index.ts';
 import type { PlaybookFlow } from '../../data/types.ts';
+import VoiceSegment from './VoiceSegment.tsx';
+import KnowledgeSegment from './KnowledgeSegment.tsx';
 import styles from './AgentScreen.module.css';
+
+type Segment = 'overview' | 'voice' | 'knowledge';
+
+const SEGMENTS: { id: Segment; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'voice', label: 'Voice' },
+  { id: 'knowledge', label: 'Knowledge' },
+];
 
 // ── glyphs ──────────────────────────────────────────────────────────────────
 function VoiceGlyph() {
@@ -39,7 +50,7 @@ function ShieldGlyph() {
   );
 }
 
-// ── Profile ─────────────────────────────────────────────────────────────────
+// ── Overview: Profile ───────────────────────────────────────────────────────
 function ProfileSkeleton() {
   return (
     <section className={styles.profile}>
@@ -56,7 +67,7 @@ function ProfileSkeleton() {
   );
 }
 
-// ── Flows ───────────────────────────────────────────────────────────────────
+// ── Overview: Flows ─────────────────────────────────────────────────────────
 function FlowRow({
   flow,
   onToggle,
@@ -124,11 +135,10 @@ function FlowsSkeleton() {
   );
 }
 
-export default function AgentScreen() {
+// ── Overview segment (r10 content, unchanged) ───────────────────────────────
+function OverviewSegment() {
   const client = useClient();
   const profile = useData(() => client.agentProfile(), [client]);
-  // discoveryNonce-free: flows carry `enabled` from session state; a toggle
-  // mutates that state, so refetch after each flip to keep stats honest.
   const flows = useData(() => client.playbookFlows(), [client]);
 
   const onToggleFlow = (key: string, enabled: boolean) => {
@@ -138,8 +148,8 @@ export default function AgentScreen() {
   const p = profile.data;
 
   return (
-    <div className={styles.page}>
-      {/* (a) PROFILE — the agent's identity card. */}
+    <div className={styles.overview}>
+      {/* PROFILE — the agent's identity card. */}
       {p === undefined ? (
         <ProfileSkeleton />
       ) : (
@@ -149,7 +159,7 @@ export default function AgentScreen() {
               <VoiceGlyph />
             </span>
             <div className={styles.profileIdentity}>
-              <h1 className={styles.profileName}>{p.name}</h1>
+              <h2 className={styles.profileName}>{p.name}</h2>
               <span className={styles.profileLine}>
                 One agent for the whole business · sends on {p.line}
               </span>
@@ -178,7 +188,7 @@ export default function AgentScreen() {
         </section>
       )}
 
-      {/* (b) FLOWS — the heart. Hairline rows, one per playbook flow. */}
+      {/* FLOWS — the heart. Hairline rows, one per playbook flow. */}
       <section className={styles.flowsSection}>
         <div className={styles.flowsHead}>
           <h2 className={styles.sectionTitle}>Flows</h2>
@@ -195,7 +205,7 @@ export default function AgentScreen() {
         )}
       </section>
 
-      {/* (c) GUARDRAILS — one quiet trust strip at the bottom. */}
+      {/* GUARDRAILS — one quiet trust strip. Immutable rules, NOT knowledge. */}
       {p !== undefined && (
         <section className={styles.guardrails}>
           <span className={styles.guardrailsLabel}>Guardrails · what it will never do without you</span>
@@ -209,6 +219,38 @@ export default function AgentScreen() {
           </ul>
         </section>
       )}
+    </div>
+  );
+}
+
+export default function AgentScreen() {
+  const [segment, setSegment] = useState<Segment>('overview');
+
+  return (
+    <div className={styles.page}>
+      <header className={styles.pageHead}>
+        <h1 className={styles.title}>Agent</h1>
+        <div className={styles.segments} role="tablist" aria-label="Agent sections">
+          {SEGMENTS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={segment === s.id}
+              className={`${styles.segment} ${segment === s.id ? styles.segmentActive : ''}`}
+              onClick={() => setSegment(s.id)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <div className={styles.segmentBody}>
+        {segment === 'overview' && <OverviewSegment />}
+        {segment === 'voice' && <VoiceSegment />}
+        {segment === 'knowledge' && <KnowledgeSegment />}
+      </div>
     </div>
   );
 }

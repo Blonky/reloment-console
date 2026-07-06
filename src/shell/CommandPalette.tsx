@@ -157,9 +157,9 @@ const ITEMS: PaletteItem[] = [
   { id: 'nav-home', kind: 'nav', to: '/', label: 'Home', group: 'Go to', icon: IconHome, keywords: 'command channel pulse dashboard start' },
   { id: 'nav-inbox', kind: 'nav', to: '/inbox', label: 'Inbox', group: 'Go to', icon: IconInbox, keywords: 'approvals queue threads triage cockpit drafts' },
   { id: 'nav-contacts', kind: 'nav', to: '/contacts', label: 'Contacts', group: 'Go to', icon: IconContacts, keywords: 'book customers people memory roster' },
-  { id: 'nav-agent', kind: 'nav', to: '/agent', label: 'Agent', group: 'Go to', icon: IconAgent, keywords: 'flows playbooks campaigns autonomy voice guardrails profile trained' },
+  { id: 'nav-agent', kind: 'nav', to: '/agent', label: 'Agent', group: 'Go to', icon: IconAgent, keywords: 'flows playbooks campaigns autonomy voice knowledge house style guardrails profile trained' },
   { id: 'nav-insights', kind: 'nav', to: '/insights', label: 'Insights', group: 'Go to', icon: IconInsights, keywords: 'outcomes recovered revenue ledger analytics' },
-  { id: 'nav-trust', kind: 'nav', to: '/trust', label: 'Trust & Settings', group: 'Go to', icon: IconTrust, keywords: 'kill switch opt-out audit compliance settings pause' },
+  { id: 'nav-settings', kind: 'nav', to: '/settings', label: 'Settings', group: 'Go to', icon: IconTrust, keywords: 'trust connections marketplace kill switch opt-out audit compliance pause' },
 
   // Commands — routed to /?cmd=<phrase>; Home submits them through the real path.
   { id: 'cmd-renewals', kind: 'command', phrase: 'Show renewals', label: 'Show renewals', group: 'Commands', icon: IconCalendar, keywords: 'renewal due upcoming 30 days book' },

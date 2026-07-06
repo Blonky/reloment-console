@@ -168,6 +168,130 @@
   color: var(--ink-2);
 }
 
+/* ── marketplace: group labels + available grid (r13) ────────────────────── */
+.groupLabelRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 16px 8px;
+  border-top: 1px solid var(--line);
+}
+
+/* The first group label (Connected) sits flush under the card header. */
+.groupLabelRow:first-child {
+  border-top: none;
+}
+
+.groupLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.groupHint {
+  font-size: 12px;
+  color: var(--ink-2);
+  opacity: 0.85;
+}
+
+/* Available rows — a tight 2-col grid (1-col ≤900px), same divider idiom. */
+.availGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.availRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.availGrid > .availRow:nth-child(1),
+.availGrid > .availRow:nth-child(2) {
+  border-top: none;
+}
+.availGrid > .availRow:nth-child(odd) {
+  border-left: none;
+}
+
+.availRequested {
+  background: var(--surface-2);
+}
+
+.availText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.availName {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.availBlurb {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.requestedTag {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.noteRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.noteInput {
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  width: 220px;
+  max-width: 46vw;
+}
+
+.noteInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+@media (max-width: 900px) {
+  .availGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .availRow {
+    border-left: none;
+  }
+  .availGrid > .availRow:nth-child(2) {
+    border-top: 1px solid var(--line);
+  }
+  .noteInput {
+    width: 160px;
+  }
+}
+
 /* ── data & compliance ───────────────────────────────────────── */
 .compliance {
   margin: 0;

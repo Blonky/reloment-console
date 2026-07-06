@@ -334,6 +334,30 @@ export interface OutcomeRow {
   month: string; // ISO 'YYYY-MM' the outcome was attributed to
 }
 
+// ── Insights report (r14) — the owner's report: PROOF / WORK / PIPELINE ──────
+// One composed read for the Insights surface. Every field derives from the SAME
+// session/fixture state the rest of the client reads — no new hardcoded stats.
+// `activity` is the WORK band (counted from the audit record + the message store,
+// the same derivations Home's overnight lines use); `pipeline` is what the agent
+// is setting up next (renewals due, reactivation and bundle candidates from the
+// book). Caps each pipeline list at 3 with a `more` overflow count.
+export interface InsightsReport {
+  activity: {
+    conversations: number; // live conversation count
+    sent: number; // messages sent through the gate (audit message.sent)
+    heldForReview: number; // drafts awaiting approval / routed to human (= Home's Approvals waiting)
+    blockedByGate: number; // sends the gate refused (audit)
+    missedCallsAnswered: number; // missed-call auto-acks (0 until the demo fires one)
+    medianFirstReplyMin: number | null; // median minutes inbound→next outbound; null if no pairs
+  };
+  pipeline: {
+    renewals30d: { name: string; days: number; href: string }[]; // renewing in 0–30d
+    reactivation: { name: string; reason: string; href: string }[]; // lapsed quotes with valid marketing consent
+    bundle: { name: string; reason: string; href: string }[]; // auto-only active customers
+    more: { renewals30d: number; reactivation: number; bundle: number }; // overflow beyond the cap of 3
+  };
+}
+
 export interface LineAgent {
   key: string; // playbook/agent key or line role
   name: string; // human name of the agent
@@ -405,6 +429,53 @@ export interface PlaybookFlow {
   autonomy: 'review' | 'auto';
   autonomyLabel: string; // "Review before sending" | "Sends automatically (still gated)"
   stats: { enrolled: number; sent: number; replied: number; heldBack: number };
+}
+
+// ── Agent brain (r13) — the editable knowledge-base surface ─────────────────
+// The business trains its own agent: an editable voice (name, traits, house-style
+// instructions) plus a list of knowledge documents folded into the agent's
+// context. Mirrors the platform's /api/agent/voice + /api/knowledge routes so
+// HttpClient maps 1:1. The demo persists edits to localStorage and READS the live
+// voice store from agentProfile()/toneProfile() — training visibly changes the
+// agent's identity card.
+export interface AgentVoice {
+  name: string;
+  traits: string[]; // ≤6, each ≤60 chars
+  instructions: string; // plain-language house style, ≤2000 chars
+}
+
+// A knowledge document the business drops in. 'company'/'rules'/'faq' are inline-
+// editable prose; 'file' entries record a dropped-in file (filename + size) that
+// the demo labels "indexed" — an honest demo affordance, no real upload/parse.
+export type KnowledgeKind = 'company' | 'rules' | 'faq' | 'file';
+
+export interface KnowledgeDoc {
+  id: string;
+  kind: KnowledgeKind;
+  title: string;
+  body: string;
+  filename?: string; // present for 'file' entries
+  size_bytes?: number; // present for 'file' entries
+  updated_at: string; // ISO
+}
+
+// ── Connections marketplace (r13) ───────────────────────────────────────────
+// The Connections surface becomes a marketplace: the wires already connected plus
+// the native surfaces available to request. `available` mirrors the provider's
+// real integration catalog (Salesforce, HubSpot, Slack, AMS systems, custom MCP).
+export interface ConnectionCatalogItem {
+  key: string;
+  name: string;
+  blurb: string; // one line: what this connection would power
+  // True once the business has requested this integration. The demo persists it
+  // so the optimistic "Requested" state survives reload; the platform sets it
+  // from its own pending-request records.
+  requested?: boolean;
+}
+
+export interface ConnectionsCatalog {
+  connected: ConnectionRow[];
+  available: ConnectionCatalogItem[];
 }
 
 // ── Connections (Trust & Settings) ──────────────────────────────────────────

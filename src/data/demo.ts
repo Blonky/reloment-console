@@ -18,6 +18,7 @@ import type {
   AgentChatMessage,
   AgentProfile,
   AgentSession,
+  AgentVoice,
   ApproveResult,
   AuditRow,
   BookRow,
@@ -25,7 +26,9 @@ import type {
   CampaignRow,
   Channel,
   ConnectionRow,
+  ConnectionsCatalog,
   Contact,
+  KnowledgeDoc,
   ConversationBrief,
   EnrollResult,
   FeedEvent,
@@ -33,6 +36,7 @@ import type {
   HomeBriefing,
   HomePulse,
   InboundResult,
+  InsightsReport,
   LineAgent,
   LinkPart,
   MediaPart,
@@ -108,6 +112,43 @@ interface AgentStore {
   sessions: AgentSession[];
   messages: Record<string, AgentChatMessage[]>;
 }
+
+// The persisted brain shape under BRAIN_STORE_KEY: the editable voice + the
+// knowledge documents. Seeded once (from TONE_PROFILE + three starter docs) the
+// first time it is read on a fresh browser; edits persist here.
+interface AgentBrainStore {
+  voice: AgentVoice;
+  docs: KnowledgeDoc[];
+}
+
+// The native surfaces available to request in the Connections marketplace —
+// mirrors the provider's real integration catalog (conversation panes, sidebar
+// sends, workflow/flow actions, book-of-record sync, custom MCP/API).
+const AVAILABLE_CONNECTIONS: { key: string; name: string; blurb: string }[] = [
+  {
+    key: 'salesforce',
+    name: 'Salesforce',
+    blurb: 'Conversation pane on Lead, Contact & Account + Flow send actions',
+  },
+  { key: 'hubspot', name: 'HubSpot', blurb: 'Contact sidebar sends + workflow actions' },
+  { key: 'slack', name: 'Slack', blurb: 'Reply triage in your channels' },
+  { key: 'nowcerts', name: 'NowCerts', blurb: 'Book of record sync' },
+  { key: 'hawksoft', name: 'HawkSoft', blurb: 'Book of record sync' },
+  { key: 'custom', name: 'Custom', blurb: 'Bring your own MCP or API' },
+];
+
+// ── Agent brain (r13) persistence ───────────────────────────────────────────
+// One namespaced key holds the editable voice + knowledge documents. Same
+// guarded pattern as the agent-session store: an in-memory cache is always
+// authoritative; localStorage is best-effort (SSR / privacy mode safe).
+const BRAIN_STORE_KEY = 'reloment.demo.agentBrain.v1';
+// The Connections marketplace records requested integrations under its own key so
+// a "Requested" state survives reload without touching the brain store.
+const CONNECTION_REQUESTS_KEY = 'reloment.demo.connectionRequests.v1';
+// Voice limits mirror the pinned PUT /api/agent/voice contract.
+const VOICE_TRAIT_MAX = 6;
+const VOICE_TRAIT_LEN = 60;
+const VOICE_INSTRUCTIONS_LEN = 2000;
 
 // The single latency helper. One knob so the whole client feels consistent.
 const LATENCY_MS = 250;
@@ -1385,51 +1426,203 @@ export class DemoClient implements DataClient {
     return delay({ needsYou, overnight, callOut, asks: asks.slice(0, 3) });
   }
 
-  // Plain-English one-liners of what the agent did this session, counted from the
-  // audit log (the single record of every governed action). No hardcoded stats.
-  private overnightLines(): string[] {
-    let sends = 0;
-    let holds = 0;
-    let blocks = 0;
-    let missed = 0;
+  // ── Activity derivation (single source of truth) ────────────────────────────
+  // What the agent did this session, counted from the audit log (the record of
+  // every governed action) + the message store. Home's overnight lines AND the
+  // Insights WORK band both read this one helper — the numbers can never disagree.
+  //   sent           — audit rows where the gate let a message go (message.sent)
+  //   heldForReview  — drafts currently awaiting approval OR routed to a human
+  //                    (= Home's "Approvals waiting" / the Inbox queue's count)
+  //   blockedByGate  — send_gate rows the gate refused (not allow, not a hold)
+  //   missedCallsAnswered — auto-ack sends on a missed-call inquiry basis
+  //   preparedDrafts — draft-prep audit entries (used only by the overnight copy)
+  private activityCounts(): {
+    sent: number;
+    heldForReview: number;
+    blockedByGate: number;
+    missedCallsAnswered: number;
+    preparedDrafts: number;
+  } {
+    let sent = 0;
+    let blockedByGate = 0;
+    let missedCallsAnswered = 0;
+    let preparedDrafts = 0;
     for (const a of this.auditLog) {
-      if (a.action === 'message.sent') sends += 1;
-      else if (a.action === 'draft.created' || a.action === 'draft_edited') holds += 1;
-      else if (a.action === 'send.blocked' || a.reason.startsWith('blocked_')) blocks += 1;
-      else if (a.action === 'call.missed') missed += 1;
+      if (a.reason.startsWith('auto_ack')) missedCallsAnswered += 1;
+      if (a.action === 'message.sent') sent += 1;
+      else if (a.action === 'draft.created' || a.action === 'draft_edited') preparedDrafts += 1;
+      else if (a.action === 'send.blocked' || a.reason.startsWith('blocked_')) blockedByGate += 1;
+      // A send_gate row that isn't an allow and isn't a quiet-hours HOLD is a block.
+      else if (
+        a.action === 'send_gate' &&
+        a.reason !== 'allow' &&
+        a.reason !== 'quiet_hours'
+      ) {
+        blockedByGate += 1;
+      }
     }
-    // Held drafts currently awaiting approval (from the store, not the log).
-    const heldNow = this.allMessages().filter(
-      ({ msg }) => msg.status === 'awaiting_approval',
+    // "Approvals waiting" — the Inbox queue's definition (single source of truth).
+    const heldForReview = this.allMessages().filter(
+      ({ msg }) => msg.status === 'awaiting_approval' || msg.status === 'routed_to_human',
     ).length;
+    return { sent, heldForReview, blockedByGate, missedCallsAnswered, preparedDrafts };
+  }
+
+  // Median minutes between an inbound and the NEXT outbound sent on the same
+  // conversation, across the whole store. null when there are no inbound→outbound
+  // pairs to measure. Deterministic (fixture timestamps are fixed offsets).
+  private medianFirstReplyMin(): number | null {
+    const gaps: number[] = [];
+    for (const t of this.threads.values()) {
+      const ordered = [...t.messages].sort((a, b) => a.created_at.localeCompare(b.created_at));
+      let pendingInboundAt: number | null = null;
+      for (const m of ordered) {
+        if (m.direction === 'inbound') {
+          if (pendingInboundAt === null) pendingInboundAt = Date.parse(m.created_at);
+        } else if (m.direction === 'outbound' && m.status === 'sent' && pendingInboundAt !== null) {
+          const gapMs = Date.parse(m.created_at) - pendingInboundAt;
+          if (gapMs >= 0) gaps.push(gapMs / 60_000);
+          pendingInboundAt = null;
+        }
+      }
+    }
+    if (gaps.length === 0) return null;
+    gaps.sort((a, b) => a - b);
+    const mid = Math.floor(gaps.length / 2);
+    const median =
+      gaps.length % 2 === 1 ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) / 2;
+    return Math.max(1, Math.round(median));
+  }
+
+  // Plain-English one-liners of what the agent did this session, over the same
+  // activityCounts() the Insights WORK band reads. No hardcoded stats.
+  private overnightLines(): string[] {
+    const { sent, heldForReview, blockedByGate, missedCallsAnswered, preparedDrafts } =
+      this.activityCounts();
 
     const lines: string[] = [];
-    if (sends > 0) lines.push(`Sent ${sends} message${sends === 1 ? '' : 's'} through the send gate.`);
-    if (heldNow > 0) {
-      lines.push(`Held ${heldNow} draft${heldNow === 1 ? '' : 's'} for your approval.`);
-    } else if (holds > 0) {
-      lines.push(`Prepared ${holds} draft${holds === 1 ? '' : 's'} for review.`);
+    if (sent > 0) lines.push(`Sent ${sent} message${sent === 1 ? '' : 's'} through the send gate.`);
+    if (heldForReview > 0) {
+      lines.push(`Held ${heldForReview} draft${heldForReview === 1 ? '' : 's'} for your approval.`);
+    } else if (preparedDrafts > 0) {
+      lines.push(`Prepared ${preparedDrafts} draft${preparedDrafts === 1 ? '' : 's'} for review.`);
     }
-    if (missed > 0) lines.push(`Answered ${missed} missed call${missed === 1 ? '' : 's'} with a gated text-back.`);
-    if (blocks > 0) lines.push(`Blocked ${blocks} send${blocks === 1 ? '' : 's'} the gate refused.`);
+    if (missedCallsAnswered > 0) {
+      lines.push(
+        `Answered ${missedCallsAnswered} missed call${missedCallsAnswered === 1 ? '' : 's'} with a gated text-back.`,
+      );
+    }
+    if (blockedByGate > 0) {
+      lines.push(`Blocked ${blockedByGate} send${blockedByGate === 1 ? '' : 's'} the gate refused.`);
+    }
     if (lines.length === 0) lines.push('Quiet overnight — nothing needed sending.');
     return lines;
   }
 
-  // ── Voice/tone profile & booking connection (read-only fixtures) ────────────
+  // ── Insights report (r14) — the owner's report ──────────────────────────────
+  // PROOF is the outcome ledger (read by the screen via outcomes()/home()). This
+  // read composes WORK (activityCounts + median first reply) and PIPELINE (from
+  // the book): renewals in 0–30d, reactivation candidates (lapsed quotes that
+  // still hold valid marketing consent and aren't opted out), and bundle
+  // candidates (auto-only ACTIVE customers). Each pipeline list caps at 3 with an
+  // overflow count. Names carry a direct href to their thread (or contacts book).
+  async insightsReport(): Promise<InsightsReport> {
+    const counts = this.activityCounts();
+    // The report covers the same period as the outcome ledger, so Sent counts
+    // every outbound `sent` in the store (seeded history + session) — unlike
+    // the Home "Overnight" line, which is scoped to session audit activity.
+    const sentAllTime = this.allMessages().filter(
+      ({ msg }) => msg.direction === 'outbound' && msg.status === 'sent',
+    ).length;
+    const activity: InsightsReport['activity'] = {
+      conversations: this.threads.size,
+      sent: sentAllTime,
+      heldForReview: counts.heldForReview,
+      blockedByGate: counts.blockedByGate,
+      missedCallsAnswered: counts.missedCallsAnswered,
+      medianFirstReplyMin: this.medianFirstReplyMin(),
+    };
+
+    // A direct href for a contact — their live thread if one exists, else the book.
+    const hrefFor = (contactId: string): string => {
+      const conv =
+        [...this.threads.values()].find((t) => t.contactId === contactId) ??
+        threadByContactId(contactId);
+      return conv
+        ? `/inbox?c=${encodeURIComponent(conv.conversationId)}`
+        : `/contacts?c=${encodeURIComponent(contactId)}`;
+    };
+
+    // Renewals — anything renewing in the next 0–30 days, nearest first.
+    const renewalsAll = CONTACTS.filter(
+      (c) => c.xDateDays !== null && c.xDateDays >= 0 && c.xDateDays <= 30,
+    )
+      .sort((a, b) => (a.xDateDays ?? 0) - (b.xDateDays ?? 0))
+      .map((c) => ({ name: c.name, days: c.xDateDays as number, href: hrefFor(c.id) }));
+
+    // Reactivation — lapsed quotes that still hold VALID marketing consent and
+    // aren't opted out (exactly who the win-back playbook can legally re-engage).
+    const reactivationAll = CONTACTS.filter(
+      (c) =>
+        c.status === 'lapsed_quote' &&
+        !c.optedOut &&
+        this.consentScopes(c.id).has('marketing'),
+    )
+      .sort((a, b) => (b.xDateDays ?? -9999) - (a.xDateDays ?? -9999)) // most-recently lapsed first
+      .map((c) => ({
+        name: c.name,
+        reason: 'Quote lapsed — marketing consent still valid',
+        href: hrefFor(c.id),
+      }));
+
+    // Bundle — auto-only ACTIVE customers (a home policy is the cross-sell).
+    const bundleAll = CONTACTS.filter((c) => c.lob === 'Auto' && c.status === 'active')
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((c) => ({
+        name: c.name,
+        reason: 'Auto only — no home policy',
+        href: hrefFor(c.id),
+      }));
+
+    const CAP = 3;
+    const pipeline: InsightsReport['pipeline'] = {
+      renewals30d: renewalsAll.slice(0, CAP),
+      reactivation: reactivationAll.slice(0, CAP),
+      bundle: bundleAll.slice(0, CAP),
+      more: {
+        renewals30d: Math.max(0, renewalsAll.length - CAP),
+        reactivation: Math.max(0, reactivationAll.length - CAP),
+        bundle: Math.max(0, bundleAll.length - CAP),
+      },
+    };
+
+    return delay({ activity, pipeline });
+  }
+
+  // ── Voice/tone profile & booking connection ─────────────────────────────────
+  // toneProfile() now READS the live voice store (r13) for its traits, so an edit
+  // on the Agent → Voice segment flows straight into every surface that reads it.
+  // trainedOn + the before/after example stay fixture-derived (the demo doesn't
+  // retrain the example prose from edits — see agentProfile()).
   toneProfile(): Promise<ToneProfile> {
+    const voice = this.readBrainStore().voice;
     return delay({
       trainedOn: TONE_PROFILE.trainedOn,
-      traits: [...TONE_PROFILE.traits],
+      traits: [...voice.traits],
       example: { generic: TONE_PROFILE.example.generic, tuned: TONE_PROFILE.example.tuned },
     });
   }
 
-  // ── Agent profile (r10) — the merged "Agent" surface's identity card ────────
+  // ── Agent profile (r10 → r13 editable) — the "Agent" surface's identity card ─
   // ONE agent per business (Intercom-Fin shape) that switches roles across flows.
-  // Composed from TONE_PROFILE + the line's E.164 + fixed guardrails — no new
-  // hardcoded facts. The name is simple and human ("Hartley concierge").
+  // r13: the name + traits now DERIVE FROM THE LIVE VOICE STORE — editing them on
+  // the Voice segment updates the profile immediately (the demo proves training
+  // changes the agent's identity). trainedOn, the before/after example, and the
+  // fixed guardrails stay grounded (the drafting bodies keep their templates; what
+  // moves is the agent's stated identity). The "tuned" example header reads "Your
+  // agent" in the UI. line + guardrails are fixed.
   agentProfile(): Promise<AgentProfile> {
+    const voice = this.readBrainStore().voice;
     const guardrails = [
       'Never gives coverage or legal advice — routes to a licensed human',
       'Only texts people with consent on file — the gate refuses everything else',
@@ -1437,10 +1630,10 @@ export class DemoClient implements DataClient {
       'STOP always sticks — only the customer can opt back in',
     ];
     return delay({
-      name: 'Hartley concierge',
+      name: voice.name,
       line: LINE_E164,
       trainedOn: TONE_PROFILE.trainedOn,
-      traits: [...TONE_PROFILE.traits],
+      traits: [...voice.traits],
       example: { generic: TONE_PROFILE.example.generic, tuned: TONE_PROFILE.example.tuned },
       guardrails,
     });
@@ -2175,6 +2368,9 @@ export class DemoClient implements DataClient {
   // guarded (SSR / privacy mode → the in-memory fallback below is authoritative).
   // Ordering uses the session stamp() clock so newest-first is deterministic.
   private memoryStore: AgentStore | null = null; // in-memory fallback / cache
+  private brainStore: AgentBrainStore | null = null; // voice + knowledge cache
+  private connectionRequests: Set<string> | null = null; // requested keys cache
+  private knowledgeSeq = 0; // monotonic knowledge-doc id counter
   private agentSeq = 0; // monotonic id counter (deterministic, no Math.random)
   private agentSeqSeeded = false; // seeded once from persisted ids per instance
 
@@ -2306,6 +2502,227 @@ export class DemoClient implements DataClient {
     return one.length > TITLE_MAX ? `${one.slice(0, TITLE_MAX - 1)}…` : one;
   }
 
+  // ── Agent brain (r13) — editable voice + knowledge base ─────────────────────
+  // Persisted to localStorage under BRAIN_STORE_KEY with the SAME guarded pattern
+  // as the session store (in-memory cache authoritative; storage best-effort).
+  // Seeded ONCE on first read: voice from TONE_PROFILE (+ empty instructions), and
+  // three warm starter docs (Company / House rules / FAQ). agentProfile() and
+  // toneProfile() read voice.traits/name from here, so edits change the agent.
+
+  // Build the seed brain the first time nothing is persisted. Deterministic.
+  private seedBrain(): AgentBrainStore {
+    const at = this.stamp();
+    return {
+      voice: {
+        name: 'Hartley concierge',
+        traits: [...TONE_PROFILE.traits],
+        instructions: '',
+      },
+      docs: [
+        {
+          id: this.nextKnowledgeId(),
+          kind: 'company',
+          title: 'About Hartley Insurance',
+          body:
+            'Hartley Insurance Group is a family-run independent agency in Austin, writing ' +
+            'personal auto, home and umbrella for people who want a real human on the other ' +
+            'end. Tom Hartley leads renewals himself and would rather talk something through ' +
+            'than let a policy lapse quietly.',
+          updated_at: at,
+        },
+        {
+          id: this.nextKnowledgeId(),
+          kind: 'rules',
+          title: 'House rules',
+          body:
+            '- Always offer a call before quoting numbers over text.\n' +
+            "- Never promise a rate — Tom confirms every quote.\n" +
+            '- If someone sounds frustrated, slow down and offer to have Tom call.',
+          updated_at: at,
+        },
+        {
+          id: this.nextKnowledgeId(),
+          kind: 'faq',
+          title: 'Do you offer payment plans?',
+          body:
+            'Yes — most carriers we write with support monthly EFT or card autopay with no ' +
+            'extra fee, and paid-in-full usually earns a small discount. For the exact split ' +
+            'on a specific policy, offer to have Tom pull it up on a quick call.',
+          updated_at: at,
+        },
+      ],
+    };
+  }
+
+  private nextKnowledgeId(): string {
+    this.knowledgeSeq += 1;
+    return `kn_${this.knowledgeSeq}`;
+  }
+
+  // Seed the knowledge id counter past the highest persisted suffix so ids minted
+  // in a fresh load never collide with docs persisted in a previous load.
+  private seedKnowledgeSeq(docs: KnowledgeDoc[]): void {
+    let max = this.knowledgeSeq;
+    for (const d of docs) {
+      const n = Number(d.id.slice(d.id.lastIndexOf('_') + 1));
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+    this.knowledgeSeq = max;
+  }
+
+  private readBrainStore(): AgentBrainStore {
+    if (this.brainStore) return this.brainStore;
+    try {
+      const raw = globalThis.localStorage?.getItem(BRAIN_STORE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as AgentBrainStore;
+        if (parsed && parsed.voice && Array.isArray(parsed.docs)) {
+          this.brainStore = parsed;
+          this.seedKnowledgeSeq(parsed.docs);
+          return parsed;
+        }
+      }
+    } catch {
+      // SSR / privacy mode / malformed — fall through to a fresh seed.
+    }
+    const seeded = this.seedBrain();
+    this.writeBrainStore(seeded);
+    return seeded;
+  }
+
+  private writeBrainStore(store: AgentBrainStore): void {
+    this.brainStore = store;
+    try {
+      globalThis.localStorage?.setItem(BRAIN_STORE_KEY, JSON.stringify(store));
+    } catch {
+      // Quota / privacy mode — the in-memory cache still holds the truth.
+    }
+  }
+
+  agentVoice(): Promise<AgentVoice> {
+    const { voice } = this.readBrainStore();
+    return delay({ ...voice, traits: [...voice.traits] });
+  }
+
+  // Accepts a PARTIAL patch (autosave-on-blur per field). Enforces the pinned
+  // limits: ≤6 traits, each ≤60 chars, instructions ≤2000 chars. Persists and
+  // returns the new voice; agentProfile()/toneProfile() read it on their next call.
+  updateAgentVoice(patch: Partial<AgentVoice>): Promise<AgentVoice> {
+    const store = this.readBrainStore();
+    const next: AgentVoice = { ...store.voice };
+    if (patch.name !== undefined) next.name = patch.name.trim() || store.voice.name;
+    if (patch.traits !== undefined) {
+      next.traits = patch.traits
+        .map((t) => t.trim().slice(0, VOICE_TRAIT_LEN))
+        .filter((t) => t.length > 0)
+        .slice(0, VOICE_TRAIT_MAX);
+    }
+    if (patch.instructions !== undefined) {
+      next.instructions = patch.instructions.slice(0, VOICE_INSTRUCTIONS_LEN);
+    }
+    store.voice = next;
+    this.writeBrainStore(store);
+    this.appendAudit('owner', 'agent_voice_updated', Object.keys(patch).join(','));
+    return delay({ ...next, traits: [...next.traits] });
+  }
+
+  knowledgeDocs(): Promise<KnowledgeDoc[]> {
+    const { docs } = this.readBrainStore();
+    return delay(docs.map((d) => ({ ...d })));
+  }
+
+  createKnowledgeDoc(
+    doc: Pick<KnowledgeDoc, 'kind' | 'title' | 'body'> &
+      Partial<Pick<KnowledgeDoc, 'filename' | 'size_bytes'>>,
+  ): Promise<KnowledgeDoc> {
+    const store = this.readBrainStore();
+    const created: KnowledgeDoc = {
+      id: this.nextKnowledgeId(),
+      kind: doc.kind,
+      title: doc.title,
+      body: doc.body,
+      ...(doc.filename ? { filename: doc.filename } : {}),
+      ...(doc.size_bytes !== undefined ? { size_bytes: doc.size_bytes } : {}),
+      updated_at: this.stamp(),
+    };
+    store.docs.push(created);
+    this.writeBrainStore(store);
+    this.appendAudit('owner', 'knowledge_created', `${created.kind}:${created.id}`);
+    return delay({ ...created });
+  }
+
+  updateKnowledgeDoc(
+    id: string,
+    patch: Partial<Pick<KnowledgeDoc, 'title' | 'body'>>,
+  ): Promise<KnowledgeDoc> {
+    const store = this.readBrainStore();
+    const doc = store.docs.find((d) => d.id === id);
+    if (!doc) return Promise.reject(new Error('not found'));
+    if (patch.title !== undefined) doc.title = patch.title;
+    if (patch.body !== undefined) doc.body = patch.body;
+    doc.updated_at = this.stamp();
+    this.writeBrainStore(store);
+    this.appendAudit('owner', 'knowledge_updated', id);
+    return delay({ ...doc });
+  }
+
+  deleteKnowledgeDoc(id: string): Promise<void> {
+    const store = this.readBrainStore();
+    store.docs = store.docs.filter((d) => d.id !== id);
+    this.writeBrainStore(store);
+    this.appendAudit('owner', 'knowledge_deleted', id);
+    return delay(undefined);
+  }
+
+  // ── Connections marketplace (r13) ───────────────────────────────────────────
+  // connected = the existing connections() rows (unchanged idiom); available =
+  // the native surfaces the business can request. A requested key persists so its
+  // optimistic "Requested" state survives reload.
+  private readConnectionRequests(): Set<string> {
+    if (this.connectionRequests) return this.connectionRequests;
+    let set = new Set<string>();
+    try {
+      const raw = globalThis.localStorage?.getItem(CONNECTION_REQUESTS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as string[];
+        if (Array.isArray(parsed)) set = new Set(parsed);
+      }
+    } catch {
+      // SSR / privacy mode / malformed — start empty.
+    }
+    this.connectionRequests = set;
+    return set;
+  }
+
+  private writeConnectionRequests(set: Set<string>): void {
+    this.connectionRequests = set;
+    try {
+      globalThis.localStorage?.setItem(CONNECTION_REQUESTS_KEY, JSON.stringify([...set]));
+    } catch {
+      // Quota / privacy mode — the in-memory cache still holds the truth.
+    }
+  }
+
+  async connectionsCatalog(): Promise<ConnectionsCatalog> {
+    const connected = await this.connections();
+    const requested = this.readConnectionRequests();
+    return delay({
+      connected,
+      available: AVAILABLE_CONNECTIONS.map((a) => ({
+        ...a,
+        requested: requested.has(a.key),
+      })),
+    });
+  }
+
+  requestConnection(key: string, note?: string): Promise<{ ok: true }> {
+    const set = this.readConnectionRequests();
+    set.add(key);
+    this.writeConnectionRequests(set);
+    this.appendAudit('owner', 'connection_requested', note ? `${key}:${note}` : key);
+    return delay({ ok: true as const });
+  }
+
   // ── Research / waterfall enrichment (r11) — demo-honest ─────────────────────
   // Resolve the contact by id or fuzzy name, then run a first-party waterfall:
   //   book          → real policy / LOB / renewal facts from the fixture
@@ -2403,7 +2820,7 @@ export class DemoClient implements DataClient {
       { match: ['inbox', 'approvals'], label: 'Inbox', href: '/inbox' },
       { match: ['agent', 'flows', 'playbooks'], label: 'Agent', href: '/agent' },
       { match: ['insights', 'revenue'], label: 'Insights', href: '/insights' },
-      { match: ['settings', 'trust', 'connections'], label: 'Trust & Settings', href: '/trust' },
+      { match: ['settings', 'trust', 'connections'], label: 'Settings', href: '/settings' },
       { match: ['contacts', 'book'], label: 'Contacts', href: '/contacts' },
     ];
     const words = q.split(/\s+/);

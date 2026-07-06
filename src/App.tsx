@@ -14,7 +14,9 @@ const ContactsScreen = lazy(() => import('./screens/contacts/ContactsScreen.tsx'
 // /agents redirect to /agent below.
 const AgentScreen = lazy(() => import('./screens/agent/AgentScreen.tsx'));
 const InsightsScreen = lazy(() => import('./screens/insights/InsightsScreen.tsx'));
-const TrustScreen = lazy(() => import('./screens/trust/TrustScreen.tsx'));
+// Trust & Settings became "Settings" (r13) — admin, moved out of main nav into a
+// quiet sidebar-bottom row. /trust redirects to /settings to keep old deep links.
+const SettingsScreen = lazy(() => import('./screens/trust/TrustScreen.tsx'));
 
 // Minimal centered fallback while a route chunk loads — one shimmering block,
 // never a spinner (DESIGN.md §4).
@@ -40,7 +42,7 @@ const TITLES: Record<string, string> = {
   '/contacts': 'Contacts',
   '/agent': 'Agent',
   '/insights': 'Insights',
-  '/trust': 'Trust & Settings',
+  '/settings': 'Settings',
 };
 
 export function App() {
@@ -82,7 +84,9 @@ export function App() {
             <Route path="/campaigns" element={<Navigate to="/agent" replace />} />
             <Route path="/agents" element={<Navigate to="/agent" replace />} />
             <Route path="/insights" element={<InsightsScreen />} />
-            <Route path="/trust" element={<TrustScreen />} />
+            <Route path="/settings" element={<SettingsScreen />} />
+            {/* Trust & Settings → Settings (r13); keep old deep links working. */}
+            <Route path="/trust" element={<Navigate to="/settings" replace />} />
           </Routes>
         </Suspense>
       </AppShell>
