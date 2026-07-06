@@ -1,0 +1,185 @@
+.root {
+  position: relative;
+}
+
+/* The trigger reads like the old "Demo data" info pill (StatusPill tone=info),
+   now a button that lifts on hover. */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid rgba(36, 86, 166, 0.24);
+  border-radius: var(--radius-pill);
+  background: rgba(36, 86, 166, 0.08);
+  color: var(--info);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.trigger:hover {
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-1px);
+}
+
+.triggerDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--info);
+  flex: none;
+}
+
+/* Anchored popover — hairline card, shadow-float, right-aligned under the pill. */
+.popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: 288px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-float);
+}
+
+.popTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.replyRow {
+  display: flex;
+  gap: 8px;
+}
+
+.replyInput {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--ink);
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.replyInput:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.replySend {
+  flex: none;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.replySend:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.chips {
+  display: flex;
+  gap: 8px;
+}
+
+/* Ghost chips — white pills that lift on hover (§4). */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: box-shadow var(--dur) var(--ease);
+}
+
+.chip:hover {
+  box-shadow: var(--shadow-soft);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+/* Missed call — a full-width secondary button, separated by a hairline. */
+.missedCall {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: box-shadow var(--dur) var(--ease);
+}
+
+.missedCall:hover:not(:disabled) {
+  box-shadow: var(--shadow-soft);
+}
+
+.missedCall:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Separate the missed-call section with a hairline above it. */
+.section + .section {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+@media (max-width: 768px) {
+  .popover {
+    width: 260px;
+  }
+}

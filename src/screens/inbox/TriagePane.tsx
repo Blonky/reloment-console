@@ -25,18 +25,7 @@ export interface TriagePaneProps {
   loading: boolean;
   selectedId: string | null;
   onSelect: (conversationId: string) => void;
-  // Demo affordance: mint a missed call and auto-open the text-back thread.
-  onSimulateMissedCall: () => void;
-  simulatingMissedCall: boolean;
 }
-
-// Missed-call glyph for the demo chip — a phone with a small away marker.
-const MissedCallGlyph = (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M13.5 11.2v1.7a1.2 1.2 0 0 1-1.3 1.2 11.6 11.6 0 0 1-5-1.7 11.4 11.4 0 0 1-3.5-3.5 11.6 11.6 0 0 1-1.7-5.1A1.2 1.2 0 0 1 3.2 2.5h1.7a1.2 1.2 0 0 1 1.2 1c.08.6.22 1.1.4 1.6a1.2 1.2 0 0 1-.26 1.25l-.72.72a9.3 9.3 0 0 0 3.5 3.5l.72-.72a1.2 1.2 0 0 1 1.25-.26c.5.18 1.05.32 1.6.4a1.2 1.2 0 0 1 1 1.2z" />
-    <path d="M14.5 1.5l-3 3M11.5 1.5l3 3" />
-  </svg>
-);
 
 function RowSkeleton() {
   return (
@@ -56,31 +45,18 @@ export default function TriagePane({
   loading,
   selectedId,
   onSelect,
-  onSimulateMissedCall,
-  simulatingMissedCall,
 }: TriagePaneProps) {
   const client = useClient();
   return (
     <section className={`${styles.pane} ${styles.triagePane}`} aria-label="Triage">
-      {/* Slim header — the topbar already says "Inbox"; here we only quantify,
-          plus a right-aligned demo chip to mint a missed-call text-back. */}
+      {/* Slim header — the topbar already says "Inbox"; here we only quantify.
+          Demo affordances moved to the topbar "Demo controls" popover (r10). */}
       <div className={styles.triageHead}>
         {!loading && (
           <span className={styles.triageHeadCount}>
             {rows.length} {rows.length === 1 ? 'conversation' : 'conversations'}
           </span>
         )}
-        <span className={styles.triageHeadSpacer} />
-        <button
-          type="button"
-          className={styles.missedCallChip}
-          onClick={onSimulateMissedCall}
-          disabled={simulatingMissedCall}
-          title="Demo: forward a missed call to the text-back playbook"
-        >
-          {MissedCallGlyph}
-          Simulate missed call
-        </button>
       </div>
       <div className={styles.scroll}>
         {loading ? (

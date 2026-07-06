@@ -235,7 +235,9 @@ export default function InboxScreen() {
 
   useEffect(() => {
     const unsubscribe = client.subscribe((e: FeedEvent) => {
-      const isSelected = e.conversationId === selectedRef.current;
+      // playbook.toggled is tenant-wide (no conversationId); all other events are
+      // conversation-scoped. Guard the field access so the union stays sound.
+      const isSelected = 'conversationId' in e && e.conversationId === selectedRef.current;
       if (e.type === 'typing') {
         if (!isSelected) return; // typing only matters for the open thread
         setTyping(e.state === 'typing' ? { who: e.who } : null);
@@ -301,15 +303,6 @@ export default function InboxScreen() {
     [client, selectedId, refetchAll],
   );
 
-  const onSimulate = useCallback(
-    async (text: string): Promise<void> => {
-      if (selectedId === null) return;
-      await client.simulateInbound(selectedId, text);
-      refetchAll();
-    },
-    [client, selectedId, refetchAll],
-  );
-
   // Send a rich link (booking / payment / document-request) via the composer's
   // ＋ menu. Same fail-closed gate; the link-preview bubble (or a GateReason on a
   // block) lands via the thread refetch. Resolves false when blocked.
@@ -323,22 +316,10 @@ export default function InboxScreen() {
     [client, selectedId, refetchAll],
   );
 
-  // Demo affordance: mint a missed call, then open its conversation so the
-  // operator watches the text-back choreography (missed-call entry → agent
-  // typing → auto-ack). The call.missed handler also auto-selects when nothing
-  // is open; selecting here guarantees the watch even from another thread.
-  const [simulatingMissedCall, setSimulatingMissedCall] = useState(false);
-  const onSimulateMissedCall = useCallback(async (): Promise<void> => {
-    if (simulatingMissedCall) return;
-    setSimulatingMissedCall(true);
-    try {
-      const { conversationId } = await client.simulateMissedCall();
-      setSearchParams({ c: conversationId });
-      refetchAll();
-    } finally {
-      setSimulatingMissedCall(false);
-    }
-  }, [client, simulatingMissedCall, setSearchParams, refetchAll]);
+  // The demo affordance to mint a missed call moved to the topbar "Demo controls"
+  // popover (r10). The call.missed feed event still auto-selects the new
+  // conversation here (see the subscribe handler) so the operator watches the
+  // text-back choreography regardless of where the call was triggered.
 
   const triageLoading = discovery.loading && discovery.data === undefined;
   const threadLoading = selectedId !== null && thread.loading && thread.data === undefined;
@@ -370,8 +351,6 @@ export default function InboxScreen() {
         loading={triageLoading}
         selectedId={selectedId}
         onSelect={onSelect}
-        onSimulateMissedCall={onSimulateMissedCall}
-        simulatingMissedCall={simulatingMissedCall}
       />
       <ThreadPane
         detail={detail}
@@ -391,7 +370,6 @@ export default function InboxScreen() {
         <ContextRail
           detail={detail}
           loading={threadLoading}
-          onSimulate={onSimulate}
           onOpenBrief={() => setBriefOpen(true)}
           refreshKey={discoveryNonce}
         />
@@ -408,7 +386,6 @@ export default function InboxScreen() {
             <ContextRail
               detail={detail}
               loading={threadLoading}
-              onSimulate={onSimulate}
               onOpenBrief={() => setBriefOpen(true)}
               refreshKey={discoveryNonce}
               variant="sheet"

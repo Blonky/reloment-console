@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { createClient } from './data/client.ts';
 import { ClientProvider } from './shell/ClientContext.tsx';
 import AppShell from './shell/AppShell.tsx';
@@ -10,8 +10,9 @@ import { Skeleton } from './components/index.ts';
 const HomeScreen = lazy(() => import('./screens/home/HomeScreen.tsx'));
 const InboxScreen = lazy(() => import('./screens/inbox/InboxScreen.tsx'));
 const ContactsScreen = lazy(() => import('./screens/contacts/ContactsScreen.tsx'));
-const CampaignsScreen = lazy(() => import('./screens/campaigns/CampaignsScreen.tsx'));
-const AgentsScreen = lazy(() => import('./screens/agents/AgentsScreen.tsx'));
+// Campaigns + Agents merged into ONE "Agent" surface (r10). /campaigns and
+// /agents redirect to /agent below.
+const AgentScreen = lazy(() => import('./screens/agent/AgentScreen.tsx'));
 const InsightsScreen = lazy(() => import('./screens/insights/InsightsScreen.tsx'));
 const TrustScreen = lazy(() => import('./screens/trust/TrustScreen.tsx'));
 
@@ -37,8 +38,7 @@ const TITLES: Record<string, string> = {
   '/': 'Home',
   '/inbox': 'Inbox',
   '/contacts': 'Contacts',
-  '/campaigns': 'Campaigns',
-  '/agents': 'Agents',
+  '/agent': 'Agent',
   '/insights': 'Insights',
   '/trust': 'Trust & Settings',
 };
@@ -77,8 +77,10 @@ export function App() {
             <Route path="/" element={<HomeScreen />} />
             <Route path="/inbox" element={<InboxScreen />} />
             <Route path="/contacts" element={<ContactsScreen />} />
-            <Route path="/campaigns" element={<CampaignsScreen />} />
-            <Route path="/agents" element={<AgentsScreen />} />
+            <Route path="/agent" element={<AgentScreen />} />
+            {/* Legacy routes redirect to the merged Agent surface (r10). */}
+            <Route path="/campaigns" element={<Navigate to="/agent" replace />} />
+            <Route path="/agents" element={<Navigate to="/agent" replace />} />
             <Route path="/insights" element={<InsightsScreen />} />
             <Route path="/trust" element={<TrustScreen />} />
           </Routes>

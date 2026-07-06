@@ -1,0 +1,384 @@
+/* One viewport, no page scroll (≥720px tall): a definite-height flex column.
+   Profile + guardrails are fixed; the flows list takes the slack and scrolls
+   internally if it must. We pin BOTH height and max-height so the column can
+   never grow past the viewport budget — that's what forces the flows list to
+   scroll instead of the page (the shell's .content is min-height:100% and would
+   otherwise let a flex:1 child stretch to fit its content). */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  height: calc(100vh - var(--topbar-h) - 80px);
+  max-height: calc(100vh - var(--topbar-h) - 80px);
+}
+
+/* Below 720px tall: graceful page scroll — never clip. */
+@media (max-height: 719px) {
+  .page {
+    height: auto;
+    max-height: none;
+    min-height: calc(100vh - var(--topbar-h) - 80px);
+  }
+}
+
+/* ── (a) Profile ─────────────────────────────────────────────────────────── */
+.profile {
+  flex: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.profileHead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.profileAvatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.profileIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.profileName {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 520;
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.profileLine {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+/* Traits as quiet inline chips, pushed to the right of the identity block. */
+.profileTraits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.traitChip {
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 3px 11px;
+  white-space: nowrap;
+}
+
+.trainedOn {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* Before/after voice example — a compact two-column. */
+.voiceCompare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.voiceSample {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 11px 13px;
+}
+
+.voiceTuned {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.voiceLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.voiceLabelTuned {
+  color: var(--accent);
+}
+
+.voiceText {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+/* Generic sample reads muted + struck-through-in-spirit (de-emphasized). */
+.voiceGeneric {
+  color: var(--ink-2);
+}
+
+/* ── (b) Flows ───────────────────────────────────────────────────────────── */
+.flowsSection {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.flowsHead {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 520;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.sectionHint {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+/* Table-like rows on hairlines — NOT a stat-card grid. */
+.flows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+
+.flowRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.flowRow:first-child {
+  border-top: none;
+}
+
+.flowRowOff {
+  opacity: 0.55;
+}
+
+.flowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.flowName {
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--ink);
+}
+
+.flowWhen {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.flowWhat {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  opacity: 0.85;
+}
+
+.flowAutonomy {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.autonomyPill {
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: var(--radius-pill);
+  padding: 4px 11px;
+  white-space: nowrap;
+}
+
+.autonomyReview {
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.autonomyAuto {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+}
+
+.flowRight {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  min-width: 0;
+}
+
+.flowStats {
+  font-size: 12px;
+  color: var(--ink-2);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statSep {
+  color: var(--line-strong);
+  margin: 0 1px;
+}
+
+.statHeld {
+  color: var(--hold);
+}
+
+/* ── (c) Guardrails ──────────────────────────────────────────────────────── */
+.guardrails {
+  flex: none;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 13px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.guardrailsLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.guardList {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px 22px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.guardItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.guardIcon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+/* Narrower desktops: stats can wrap under the switch by relaxing the grid. */
+@media (max-width: 1160px) {
+  .flowRow {
+    grid-template-columns: minmax(0, 1.4fr) auto auto;
+    gap: 12px;
+  }
+  .flowStats {
+    font-size: 11.5px;
+  }
+}
+
+/* Tablet: collapse the 3-column row into two rows — name+what over the
+   autonomy pill on the left, the stats+switch cluster anchored top-right. */
+@media (max-width: 900px) {
+  .voiceCompare {
+    grid-template-columns: 1fr;
+  }
+  .guardList {
+    grid-template-columns: 1fr;
+  }
+  .flowRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'main right'
+      'auto right';
+    align-items: start;
+    row-gap: 8px;
+  }
+  .flowMain {
+    grid-area: main;
+  }
+  .flowAutonomy {
+    grid-area: auto;
+  }
+  .flowRight {
+    grid-area: right;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .flowStats {
+    white-space: normal;
+    text-align: right;
+  }
+}
+
+/* Phone: profile traits drop below identity; release the one-viewport cap so the
+   whole page scrolls naturally (no nested flows scroll) — the one-viewport rule
+   is desktop-only per §4. */
+@media (max-width: 768px) {
+  .page {
+    height: auto;
+    max-height: none;
+  }
+  .flows {
+    overflow-y: visible;
+  }
+  .profileTraits {
+    margin-left: 0;
+    width: 100%;
+  }
+}

@@ -30,3 +30,6 @@ export type { GateReasonProps } from './GateReason.tsx';
 
 export { Table, THead, TBody, TR, TH, TD } from './Table.tsx';
 export type { TRProps, THProps, TDProps } from './Table.tsx';
+
+export { default as Switch } from './Switch.tsx';
+export type { SwitchProps } from './Switch.tsx';

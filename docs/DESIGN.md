@@ -31,17 +31,19 @@ normal SaaS hides errors, we *showcase* refusals — "Sam Ortiz was excluded:
 opted out" is the product working, and the UI treats it with the same visual
 dignity as a success state.
 
-## 2. Surfaces (7)
+## 2. Surfaces (6)
 
 | Route | Surface | Depth (this milestone) |
 |---|---|---|
 | `/` | **Home** — command channel + pulse | Full |
 | `/inbox` | **Inbox** — approval cockpit | Full (hero) |
 | `/contacts` | Contacts + memory board | Structured skeleton |
-| `/campaigns` | Campaigns (playbook runs) | Structured skeleton |
-| `/agents` | Agent roster + autonomy ceilings | Structured skeleton |
+| `/agent` | **Agent** — profile + flows + guardrails (Campaigns + Agents merged, r10) | Structured skeleton |
 | `/insights` | Outcomes / recovered revenue | Structured skeleton |
 | `/trust` | Trust & Settings — kill switch, opt-outs, audit | Structured skeleton |
+
+r10: the old `/campaigns` and `/agents` routes redirect to `/agent`. There is ONE
+agent per business (Intercom-Fin shape), so a "roster of agents" no longer exists.
 
 "Structured skeleton" = real layout, real demo data, real design system — but
 read-only and shallow. Never a "coming soon" placeholder; every screen must look
@@ -252,10 +254,13 @@ scrolls; they don't).
   (d) **Memory** (atoms as quiet bullets, capped at 3 behind a "+N more" toggle
   so the rail fits unscrolled at 1512×860); (e) **Agent asks** — the contact-
   scoped asks for this contact from `agentAsks()` (ask + one-line why, quiet
-  accent left border); (f) a visually distinct **demo inset** ("{First}'s phone
-  · demo", darker surface + dashed hairline top) to play the customer and watch
-  the loop respond — STOP/START chips only; the request-document chips moved to
-  the composer ＋ menu.
+  accent left border); (f) a **"Steer the agent"** block (r10, darker surface +
+  dashed hairline top) — four ghost goal chips (Book a time / Take a payment /
+  Collect info / Request a doc) + an optional note that appears once a goal is
+  active. Selecting a goal calls `steer()`; the active chip gets the accent
+  treatment; the suggestion slot morphs toward the goal. Hidden when opted out.
+  The demo affordances (play-the-customer, STOP/START, missed call) moved OUT of
+  the rail to the topbar **"Demo controls"** popover (r10).
 - **Composer ＋ menu** (r9): a small circular ＋ inside-left the composer opens an
   upward popover (hairline card, shadow-float) — "Request a document ▸" (dec page
   / driver's license / damage photos), "Send booking link", "Send payment link" —
@@ -374,6 +379,25 @@ own. Takeover-as-a-separate-state is gone — it collapses into the toggle.
   when the toggle is OFF — no agent typing or drafts on inbound, but
   `suggestion.updated` still fires so the human always has a fresh
   `held: false` suggestion to lean on.
+- **Steering** (`steer(conversationId, goal, note?)`; `SteerGoal =
+  'book_time' | 'take_payment' | 'collect_info' | 'request_document'`; `null`
+  clears; `FeedEvent` `steer.changed`). A **STEER** block on the rail lets the
+  producer point the agent at a concrete goal on a live thread. The suggestion
+  engine **incorporates it naturally** — never a canned line:
+  - **book_time** → works a concrete time offer in (uses `bookingConnection()` +
+    memory, e.g. Dana's "prefers texts after 6pm" → an after-6 slot).
+  - **take_payment** → a natural payment nudge tied to real context (a renewal
+    that's due) — one sentence + the ask, never pushy.
+  - **collect_info** → asks for the fact the agent actually lacks (the same gap
+    `agentAsks()` surfaces — e.g. an Auto+Home renewal needs the dec page).
+  - **request_document** → mirrors the document ask (a phone pic is fine).
+  A free-text **note** ("mention the bundle discount") is woven in as a clause.
+  Steering **respects the ladder** (still never repeats a sent body; rung-2 "wait"
+  still wins) **except a fresh steer resets one rung** — a one-time credit,
+  because the human explicitly asked for an action; re-armed on each new steer.
+  `rationale` gains a `"Steered: book a time"` entry. Steered + opted-out is still
+  `null` (the gate would refuse every outbound). Emits `steer.changed` +
+  `suggestion.updated`.
 
 ### Home (`/`) — the command surface (Sauna-pattern, v2)
 
@@ -470,13 +494,42 @@ Inbox context sheet converge on it.
   sync, conversations, carrier lookup) with what it contributes and when it
   last updated. First-party enrichment only; cold-lead enrichment is
   deliberately out of scope (the consent gate is the product).
-- **Campaigns**: playbook cards (classification badge: transactional /
-  marketing, counsel-signed mark) + per-run stats (enrolled / excluded / sent /
-  replied) with the exclusion reasons visible — exclusions are a first-class
-  stat, same size as sends.
-- **Agents**: roster of line agents — line number, autonomy ceiling
-  (draft-only → approved-send → bounded-auto shown as a labeled ladder, current
-  rung highlighted), registration status, playbooks attached.
+- **Agent** (r10 — Campaigns + Agents merged into one surface): there is **ONE
+  agent per business** that switches roles across flows (Intercom-Fin shape), not
+  a roster of separate bots. Three parts, all warm and plain-language:
+  - **Profile** (`agentProfile(): Promise<AgentProfile>` —
+    `{ name; line; trainedOn; traits[]; example{ generic; tuned }; guardrails[] }`).
+    The agent's identity card: a simple human name ("Hartley concierge"), the line
+    it sends on, the voice it was trained to (from `toneProfile()`), a
+    generic-vs-tuned example, and the fixed **guardrails** it operates under
+    (advice → licensed human; consent gate refuses everything else; quiet hours in
+    the customer's timezone; STOP always sticks). Composed from `TONE_PROFILE` +
+    `LINE_E164` — no new hardcoded facts.
+  - **Flows** (`playbookFlows(): Promise<PlaybookFlow[]>` —
+    `{ key; name; enabled; when; who; what; autonomy; autonomyLabel; stats }`).
+    Each playbook reads as a plain-language flow: **when** it fires ("A policy is
+    30 days from renewal", "Someone calls and we miss it"), **who** it reaches,
+    **what** the message does (the approach, not the raw template), and its
+    **autonomy** in HubSpot-Breeze plain language — **"Review before sending"**
+    (draft-for-approval) vs **"Sends automatically (still gated)"** (the
+    missed-call inquiry ack). Each flow has a session on/off toggle
+    (`setPlaybookEnabled(key, enabled)`; default all on; `FeedEvent`
+    `playbook.toggled`): a **disabled** flow stops producing drafts/acks in the
+    inbound + missed-call choreography and drops out of the home briefing. `stats`
+    (enrolled / sent / replied / heldBack) derive from the SAME
+    enrollment/campaign store as `campaignStatus()` — single source of truth (the
+    Home artifact still reads `campaignStatus()`).
+  - **Guardrails**: the fixed rules above, shown as a first-class list — the point
+    of the product is what the agent will **not** do without a human.
+
+  **Canonical agent voice (r10).** All agent-**authored** copy — playbook
+  templates, held drafts, suggestion bodies (base + ladder + steered), the
+  missed-call auto-ack, document asks, link-send sentences, the tuned tone
+  example — is **warm business-casual**: contractions, first names, one thought
+  per text, zero corporate stiffness. Hard limits: **≤ 2 sentences**, **one
+  question max**, **no emojis** in agent sends. (The refusal/system copy — opt-out
+  banners, GateReason strings, centered timeline entries — is **UI**, not the
+  agent's voice, and is exempt.)
 - **Insights**: ONE viewport, no page scroll at ≥ 800px height — top row is a
   two-card grid (hero recovered number card 1fr | monthly bar chart card 2fr,
   chart ≤ 240px tall), ledger below with its own internal scroll if it must.

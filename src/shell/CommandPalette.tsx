@@ -57,14 +57,7 @@ const IconContacts = (
     <path d="M3.5 13c0-2.2 2-3.5 4.5-3.5s4.5 1.3 4.5 3.5" />
   </Svg>
 );
-const IconCampaigns = (
-  <Svg>
-    <path d="M3 6.5 11.5 3v10L3 9.5z" />
-    <path d="M3 6.5H2.5v3H3" />
-    <path d="M5 10v2.5" />
-  </Svg>
-);
-const IconAgents = (
+const IconAgent = (
   <Svg>
     <rect x="3.5" y="5.5" width="9" height="7" rx="1.5" />
     <path d="M8 5.5V3" />
@@ -151,8 +144,7 @@ const ITEMS: PaletteItem[] = [
   { id: 'nav-home', kind: 'nav', to: '/', label: 'Home', group: 'Go to', icon: IconHome, keywords: 'command channel pulse dashboard start' },
   { id: 'nav-inbox', kind: 'nav', to: '/inbox', label: 'Inbox', group: 'Go to', icon: IconInbox, keywords: 'approvals queue threads triage cockpit drafts' },
   { id: 'nav-contacts', kind: 'nav', to: '/contacts', label: 'Contacts', group: 'Go to', icon: IconContacts, keywords: 'book customers people memory roster' },
-  { id: 'nav-campaigns', kind: 'nav', to: '/campaigns', label: 'Campaigns', group: 'Go to', icon: IconCampaigns, keywords: 'playbooks runs marketing enrolled excluded' },
-  { id: 'nav-agents', kind: 'nav', to: '/agents', label: 'Agents', group: 'Go to', icon: IconAgents, keywords: 'roster autonomy ceiling line number fleet' },
+  { id: 'nav-agent', kind: 'nav', to: '/agent', label: 'Agent', group: 'Go to', icon: IconAgent, keywords: 'flows playbooks campaigns autonomy voice guardrails profile trained' },
   { id: 'nav-insights', kind: 'nav', to: '/insights', label: 'Insights', group: 'Go to', icon: IconInsights, keywords: 'outcomes recovered revenue ledger analytics' },
   { id: 'nav-trust', kind: 'nav', to: '/trust', label: 'Trust & Settings', group: 'Go to', icon: IconTrust, keywords: 'kill switch opt-out audit compliance settings pause' },
 

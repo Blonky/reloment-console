@@ -73,9 +73,26 @@ export type FeedEvent =
   | { type: 'call.missed'; conversationId: string; callerName: string; e164: string }
   // Messages-first thread (v4): the per-conversation Agent ON/OFF switch flipped.
   | { type: 'agent.toggled'; conversationId: string; enabled: boolean }
+  // Steering (r10): the human set/cleared a per-conversation goal for the agent.
+  // Emitted alongside suggestion.updated so the composer's suggestion refetches
+  // and re-weaves the goal into its next-best message.
+  | { type: 'steer.changed'; conversationId: string }
+  // Agent flows (r10): a playbook was turned on/off for the whole tenant. A
+  // disabled playbook stops producing drafts/acks in the choreography.
+  | { type: 'playbook.toggled'; key: string; enabled: boolean }
   // Fires after ANY message lands (or the toggle/consent changes) so the UI
   // refetches suggestion() — the agent's next-best message regenerates each turn.
   | { type: 'suggestion.updated'; conversationId: string };
+
+// ── Steering (r10) — the human asks the agent to work toward a goal ─────────
+// A per-conversation steer the producer sets on a live thread. The suggestion
+// engine incorporates it NATURALLY (a time offer, a payment nudge, a missing-
+// fact ask, a document ask) — never as a canned line. null clears the steer.
+export type SteerGoal =
+  | 'book_time'
+  | 'take_payment'
+  | 'collect_info'
+  | 'request_document';
 
 // ── /api/home ───────────────────────────────────────────────────────────────
 export interface HomePulse {
@@ -355,6 +372,39 @@ export interface ToneProfile {
   trainedOn: string;
   traits: string[];
   example: { generic: string; tuned: string };
+}
+
+// ── Agent profile (r10) — the single "Agent" surface's identity card ────────
+// Intercom-Fin shape: ONE agent per business that switches roles across flows.
+// Composed from TONE_PROFILE + the line's E.164 + fixed guardrails — no new
+// hardcoded facts. `line` is the number every send goes out on; `traits` and
+// `example` mirror the tone profile; `guardrails` are the fixed rules the agent
+// operates under (advice routing, consent gate, quiet hours, STOP stickiness).
+export interface AgentProfile {
+  name: string;
+  line: string;
+  trainedOn: string;
+  traits: string[];
+  example: { generic: string; tuned: string };
+  guardrails: string[];
+}
+
+// ── Playbook flows (r10) — playbooks reshaped for the merged Agent tab ──────
+// The Campaigns + Agents tabs collapse into one "Agent" surface. Each playbook
+// reads as a plain-language FLOW: when it fires, who it reaches, what the message
+// does, and how much autonomy it has (HubSpot-Breeze plain language: "Review
+// before sending" vs "Sends automatically"). Derived from PLAYBOOKS + the same
+// campaign status store — single source of truth. `enabled` is session state.
+export interface PlaybookFlow {
+  key: string;
+  name: string;
+  enabled: boolean;
+  when: string; // plain trigger sentence
+  who: string; // the audience in one phrase
+  what: string; // one-line description of the message approach
+  autonomy: 'review' | 'auto';
+  autonomyLabel: string; // "Review before sending" | "Sends automatically (still gated)"
+  stats: { enrolled: number; sent: number; replied: number; heldBack: number };
 }
 
 // ── Connections (Trust & Settings) ──────────────────────────────────────────

@@ -57,14 +57,19 @@ function HeroCard({ pulse }: { pulse: HomePulse | undefined }) {
   return (
     <Card className={styles.heroCard}>
       <div className={styles.hero}>
-        <span className={styles.heroLabel}>Recovered revenue</span>
+        {/* The hero answers THE question: what did the agent bring back? A
+            Fraunces headline with the figure inline, then one honesty sub. */}
         {pulse === undefined ? (
-          <Skeleton width={160} height={44} />
+          <Skeleton width={280} height={44} />
         ) : (
-          <span className={`${styles.heroValue} tnum`}>{fullDollars(pulse.wonBackCents)}</span>
+          <h1 className={styles.heroHeadline}>
+            Your agent recovered{' '}
+            <span className={`${styles.heroFigure} tnum`}>{fullDollars(pulse.wonBackCents)}</span>{' '}
+            this quarter
+          </h1>
         )}
         <span className={styles.heroSub}>
-          Causally-attributed only — we count nothing we can&rsquo;t prove.
+          Only causally-attributed outcomes are counted — we count nothing we can&rsquo;t prove.
         </span>
       </div>
     </Card>
@@ -188,12 +193,9 @@ export default function InsightsScreen() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.pageHead}>
-        <h1 className={styles.title}>Insights</h1>
-        <p className={styles.sub}>What the agents recovered for the book.</p>
-      </header>
-
-      {/* Top row: hero recovered card (1fr) | chart card (2fr, ≤240px tall). */}
+      {/* The hero headline IS the page head now — no separate "Insights" kicker
+          (§4: delete chrome that repeats what the topbar already says).
+          Top row: hero recovered headline card | chart card (≤240px tall). */}
       <div className={styles.topGrid}>
         <HeroCard pulse={home.error !== undefined ? undefined : home.data} />
         <ChartCard

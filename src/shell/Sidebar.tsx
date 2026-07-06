@@ -39,15 +39,7 @@ const ContactsIcon = (
   </svg>
 );
 
-const CampaignsIcon = (
-  <svg width="16" height="16" viewBox="0 0 16 16" {...stroke} className={styles.icon}>
-    <path d="M3 6.5 11.5 3v10L3 9.5z" />
-    <path d="M3 6.5H2.5v3H3" />
-    <path d="M5 10v2.5" />
-  </svg>
-);
-
-const AgentsIcon = (
+const AgentIcon = (
   <svg width="16" height="16" viewBox="0 0 16 16" {...stroke} className={styles.icon}>
     <rect x="3.5" y="5.5" width="9" height="7" rx="1.5" />
     <path d="M8 5.5V3" />
@@ -74,8 +66,7 @@ const ITEMS: NavItem[] = [
   { to: '/', label: 'Home', end: true, icon: HomeIcon },
   { to: '/inbox', label: 'Inbox', icon: InboxIcon },
   { to: '/contacts', label: 'Contacts', icon: ContactsIcon },
-  { to: '/campaigns', label: 'Campaigns', icon: CampaignsIcon },
-  { to: '/agents', label: 'Agents', icon: AgentsIcon },
+  { to: '/agent', label: 'Agent', icon: AgentIcon },
   { to: '/insights', label: 'Insights', icon: InsightsIcon },
   { to: '/trust', label: 'Trust & Settings', icon: TrustIcon },
 ];

@@ -50,7 +50,7 @@ export default function KillSwitchCard() {
             <span className={styles.statusSub}>
               {killSwitch
                 ? 'No outbound message will leave the line until you resume.'
-                : 'Agents may send within their ceilings; every send still runs the gate.'}
+                : 'The agent may send within its ceilings; every send still runs the gate.'}
             </span>
           </div>
         </div>

@@ -15,6 +15,7 @@
 import type { DataClient } from './client.ts';
 import type {
   AgentAsk,
+  AgentProfile,
   ApproveResult,
   AuditRow,
   BookRow,
@@ -35,8 +36,10 @@ import type {
   MediaPart,
   MessagePart,
   OutcomeRow,
+  PlaybookFlow,
   QueueItem,
   SearchHit,
+  SteerGoal,
   Suggestion,
   ThreadBrief,
   ThreadDetail,
@@ -51,7 +54,9 @@ import {
   HOME_PULSE,
   LICENSED_AGENT,
   LINE_AGENTS,
+  LINE_E164,
   OUTCOMES,
+  PLAYBOOK_HISTORY,
   PLAYBOOKS,
   THREADS,
   TONE_PROFILE,
@@ -183,6 +188,19 @@ export class DemoClient implements DataClient {
   // OFF stands the agent down (no typing/drafts on inbound) but the composer and
   // an assistive suggestion stay available.
   private agentEnabled = new Map<string, boolean>();
+  // Steering (r10): per-conversation goal the human set for the agent, with an
+  // optional free-text note. Absent = no steer. null goal clears it. The steer
+  // engine reads this; the suggestion engine weaves it in naturally.
+  private steers = new Map<string, { goal: SteerGoal; note?: string }>();
+  // How many rungs a FRESH steer resets — one steer credit per conversation that
+  // lets a rung-2 "wait" state produce one more (steered) suggestion, because the
+  // human explicitly asked for an action. Consumed once the steered suggestion is
+  // computed at a rung the ladder would otherwise silence; re-armed on each steer.
+  private steerResetArmed = new Set<string>();
+  // Agent flows (r10): tenant-wide playbook on/off state (default all enabled).
+  // Absent from the map means "not yet toggled" → enabled. A disabled playbook
+  // stops producing drafts/acks in the choreography and drops from the briefing.
+  private playbookEnabled = new Map<string, boolean>();
   private threads: Map<string, FixtureThread> = new Map(
     THREADS.map((t) => [t.conversationId, cloneThread(t)]),
   );
@@ -393,6 +411,48 @@ export class DemoClient implements DataClient {
     await this.setAgentEnabled(conversationId, false);
   }
 
+  // ── Steering (r10) ──────────────────────────────────────────────────────────
+  // The human sets a per-conversation goal the agent works toward — book a time,
+  // take a payment, collect a missing fact, or request a document — with an
+  // optional free-text note. null clears it. The suggestion engine reads this
+  // and weaves it in NATURALLY (never a canned line). A FRESH steer re-arms one
+  // ladder-reset credit (the human explicitly asked for an action, so a rung-2
+  // "wait" may yield one more steered suggestion). Emits steer.changed +
+  // suggestion.updated so the composer's suggestion re-weaves the goal.
+  async steer(conversationId: string, goal: SteerGoal | null, note?: string): Promise<void> {
+    const t = this.threads.get(conversationId);
+    if (!t) throw new Error('not found');
+    if (goal === null) {
+      this.steers.delete(conversationId);
+      this.steerResetArmed.delete(conversationId);
+      this.appendAudit('owner', 'steer_cleared', conversationId);
+    } else {
+      const trimmed = note?.trim();
+      this.steers.set(conversationId, trimmed ? { goal, note: trimmed } : { goal });
+      // A fresh steer resets one rung — arm the credit.
+      this.steerResetArmed.add(conversationId);
+      this.appendAudit('owner', 'steer_set', trimmed ? `${goal}:${trimmed}` : goal);
+    }
+    this.emit({ type: 'steer.changed', conversationId });
+    this.emit({ type: 'suggestion.updated', conversationId });
+    await delay(undefined);
+  }
+
+  // Whether a playbook is ON for the tenant (default enabled until toggled off).
+  private isPlaybookEnabled(key: string): boolean {
+    return this.playbookEnabled.get(key) ?? true;
+  }
+
+  // Turn a playbook on/off for the whole tenant (session state). A disabled
+  // playbook stops producing drafts/acks in the inbound + missed-call choreography
+  // and drops out of the home briefing. Emits playbook.toggled.
+  async setPlaybookEnabled(key: string, enabled: boolean): Promise<void> {
+    this.playbookEnabled.set(key, enabled);
+    this.appendAudit('owner', 'playbook_toggled', `${key}:${enabled ? 'on' : 'off'}`);
+    this.emit({ type: 'playbook.toggled', key, enabled });
+    await delay(undefined);
+  }
+
   // Live choreography: the method resolves quickly with an ack; timers emit the
   // typing + inbound + (consent | agent draft) events that carry the payloads.
   // The store is mutated when each event's payload is created, so getThread()
@@ -465,8 +525,15 @@ export class DemoClient implements DataClient {
       // flow (agent typing ~900ms in, then typing stopped + draft.created). Agent
       // OFF → NO agent typing/draft, but the suggestion already regenerated above
       // so the human sees a fresh assistive suggestion (held: false). Opted out →
-      // silent (the suggestion() will resolve to null).
-      if (!this.optedOut.has(t.contactId) && this.isAgentEnabled(conversationId)) {
+      // silent (the suggestion() will resolve to null). If the playbook governing
+      // this reply is turned OFF, the agent stays quiet too (no draft) — the
+      // suggestion still refreshed above so the human keeps an assistive slot.
+      const replyPlaybook = this.inboundReplyPlaybookKey(t);
+      if (
+        !this.optedOut.has(t.contactId) &&
+        this.isAgentEnabled(conversationId) &&
+        this.isPlaybookEnabled(replyPlaybook)
+      ) {
         setTimeout(() => {
           this.emit({ type: 'typing', conversationId, who: 'agent', state: 'typing' });
         }, AGENT_TYPING_START_MS - CUSTOMER_TYPING_MS);
@@ -527,10 +594,10 @@ export class DemoClient implements DataClient {
   private appendHeldDraft(t: FixtureThread, inboundText: string): FixtureMessage {
     const c = contactById(t.contactId);
     const first = c?.name.split(' ')[0] ?? 'there';
-    // Grounded, generic reply — acknowledges the inbound, offers Tom's time.
+    // Grounded, warm reply — acknowledges the inbound, offers Tom's time.
     const body =
-      `Thanks ${first} — good question. Let me pull the details and have Tom ` +
-      `confirm. Want a quick call this week to go over it?`;
+      `Thanks ${first}, good question! Let me pull the details and have Tom ` +
+      `confirm. Want a quick call this week to run through it?`;
     void inboundText; // the draft is a held acknowledgement, not an LLM answer
     const m: FixtureMessage = {
       id: `msg_draft_${t.messages.length + 1}_${t.conversationId}`,
@@ -610,8 +677,10 @@ export class DemoClient implements DataClient {
     // listConversations()/queue()/thread() reads see it immediately).
     this.emit({ type: 'call.missed', conversationId, callerName: c.name, e164: c.e164 });
 
-    // If the caller opted out, the playbook stays silent — no text-back.
-    if (!this.optedOut.has(contactId)) {
+    // If the caller opted out — or the missed-call playbook is turned OFF — the
+    // playbook stays silent (no typing, no text-back). The conversation was still
+    // minted above so the missed call is visible; it just won't auto-answer.
+    if (!this.optedOut.has(contactId) && this.isPlaybookEnabled('missed_call')) {
       setTimeout(() => {
         this.emit({ type: 'typing', conversationId, who: 'agent', state: 'typing' });
       }, MISSED_CALL_AGENT_TYPING_MS);
@@ -625,7 +694,7 @@ export class DemoClient implements DataClient {
         const channel = pickChannel(contactId);
         const sent = this.appendSent(
           t!,
-          "Sorry we missed your call — this is Hartley Insurance's text line. How can we help?",
+          "Hey — sorry we missed you! This is Hartley Insurance's text line. What can we help with?",
           channel,
         );
         this.appendAudit('missed_call_agent', 'message.sent', `auto_ack channel:${channel}`);
@@ -689,7 +758,7 @@ export class DemoClient implements DataClient {
     const channel = pickChannel(t.contactId);
     const ask = this.appendSent(
       t,
-      `Could you text us a photo of your ${docType}? A picture is fine.`,
+      `Could you text over a quick photo of your ${docType}? A phone pic works great.`,
       channel,
     );
     this.appendAudit('owner', 'message.sent', `doc_request:${docType}`);
@@ -765,7 +834,7 @@ export class DemoClient implements DataClient {
           };
     const body =
       kind === 'booking'
-        ? `Here’s a link to grab a time with Tom, ${first} — pick whatever works.`
+        ? `Here’s a link to grab time with Tom, ${first} — pick whatever works for you.`
         : `Here’s a secure link to take care of your premium whenever you’re ready, ${first}.`;
     void cal;
 
@@ -921,21 +990,34 @@ export class DemoClient implements DataClient {
 
   campaignStatus(): Promise<CampaignRow[]> {
     const rows: CampaignRow[] = PLAYBOOKS.map((pb) => {
-      const enrolled = this.enrollments.filter((e) => e.playbookKey === pb.key).length;
-      const drafts_pending = this.allMessages().filter(
-        ({ msg }) =>
-          msg.status === 'awaiting_approval' && msg.id.startsWith(`msg_pb_${pb.key}_`),
-      ).length;
+      // Seeded history + live session enrollments — the same baseline
+      // playbookFlows() reads, so the Agent tab and the Home artifact agree.
+      const history = PLAYBOOK_HISTORY[pb.key] ?? { enrolled: 0, sent: 0, replied: 0 };
+      const enrolled =
+        history.enrolled + this.enrollments.filter((e) => e.playbookKey === pb.key).length;
       return {
         key: pb.key,
         name: pb.name,
         classification: pb.classification,
         status: pb.status,
         enrolled,
-        drafts_pending,
+        drafts_pending: this.playbookHeldCount(pb.name),
       };
     });
     return delay(rows);
+  }
+
+  // Gate-held drafts attributable to a playbook — counts enrolled drafts
+  // (msg_pb_* ids) AND seeded/agent drafts via playbookLabelFor, so the Agent
+  // flows and the Home campaign artifact report the same number (Dana's held
+  // renewal draft counts toward Renewal reminder on both surfaces).
+  private playbookHeldCount(name: string): number {
+    let n = 0;
+    for (const { msg } of this.allMessages()) {
+      if (msg.status !== 'awaiting_approval') continue;
+      if (this.playbookLabelFor(msg) === name) n += 1;
+    }
+    return n;
   }
 
   threadBrief(contactId: string): Promise<ThreadBrief> {
@@ -1323,6 +1405,128 @@ export class DemoClient implements DataClient {
     });
   }
 
+  // ── Agent profile (r10) — the merged "Agent" surface's identity card ────────
+  // ONE agent per business (Intercom-Fin shape) that switches roles across flows.
+  // Composed from TONE_PROFILE + the line's E.164 + fixed guardrails — no new
+  // hardcoded facts. The name is simple and human ("Hartley concierge").
+  agentProfile(): Promise<AgentProfile> {
+    const guardrails = [
+      'Never gives coverage or legal advice — routes to a licensed human',
+      'Only texts people with consent on file — the gate refuses everything else',
+      'Respects quiet hours in the customer’s timezone',
+      'STOP always sticks — only the customer can opt back in',
+    ];
+    return delay({
+      name: 'Hartley concierge',
+      line: LINE_E164,
+      trainedOn: TONE_PROFILE.trainedOn,
+      traits: [...TONE_PROFILE.traits],
+      example: { generic: TONE_PROFILE.example.generic, tuned: TONE_PROFILE.example.tuned },
+      guardrails,
+    });
+  }
+
+  // ── Playbook flows (r10) — playbooks reshaped for the merged Agent tab ──────
+  // Each playbook reads as a plain-language FLOW: when it fires, who it reaches,
+  // what the message does, and how much autonomy it has (plain "Review before
+  // sending" vs "Sends automatically"). Derived from PLAYBOOKS + the SAME
+  // enrollment/store campaignStatus() reads (single source of truth), with the
+  // session on/off state layered in.
+  async playbookFlows(): Promise<PlaybookFlow[]> {
+    const status = await this.campaignStatus(); // same store, single source
+    const byKey = new Map(status.map((s) => [s.key, s]));
+
+    // Plain-language trigger / audience / message-approach per playbook key.
+    const copy: Record<string, { when: string; who: string; what: string }> = {
+      renewal_reminder: {
+        when: 'A policy is 30 days from renewal',
+        who: 'Customers with a renewal coming up',
+        what: 'A warm heads-up that offers Tom’s time to review options first.',
+      },
+      speed_to_lead: {
+        when: 'A new lead asks for a quote',
+        who: 'Fresh inbound leads',
+        what: 'A quick, friendly reply that offers to pull their numbers today.',
+      },
+      winback_lapsed: {
+        when: 'A quote lapsed but consent is still valid',
+        who: 'Dead leads whose marketing consent still holds',
+        what: 'A light nudge that rates have moved and it’s worth a fresh look.',
+      },
+      missed_call: {
+        when: 'Someone calls and we miss it',
+        who: 'Callers to the messaging-only line',
+        what: 'An instant, apologetic text-back that asks how we can help.',
+      },
+      bundle_upsell: {
+        when: 'An auto-only customer could bundle',
+        who: 'Insured auto-only customers with no home policy',
+        what: 'A gentle mention that bundling home usually trims both premiums.',
+      },
+    };
+
+    const flows: PlaybookFlow[] = PLAYBOOKS.map((pb) => {
+      const s = byKey.get(pb.key);
+      const enabled = this.isPlaybookEnabled(pb.key);
+      // autonomy: only the missed-call ack auto-sends within its ceiling; every
+      // other playbook is draft-for-approval ("Review before sending").
+      const auto = pb.autonomy === 'auto_send_ack';
+      const c = copy[pb.key] ?? {
+        when: pb.trigger ?? 'On a matching signal',
+        who: 'Matching contacts',
+        what: pb.description ?? pb.name,
+      };
+      return {
+        key: pb.key,
+        name: pb.name,
+        enabled,
+        when: c.when,
+        who: c.who,
+        what: c.what,
+        autonomy: auto ? 'auto' : 'review',
+        autonomyLabel: auto ? 'Sends automatically (still gated)' : 'Review before sending',
+        stats: {
+          // campaignStatus already folds in the seeded history for enrolled and
+          // the label-based held count; sent/replied add history to the live
+          // session-attributed counts.
+          enrolled: s?.enrolled ?? 0,
+          sent:
+            (PLAYBOOK_HISTORY[pb.key]?.sent ?? 0) + this.playbookSentCount(pb.key),
+          replied:
+            (PLAYBOOK_HISTORY[pb.key]?.replied ?? 0) + this.playbookRepliedCount(pb.key),
+          heldBack: s?.drafts_pending ?? 0,
+        },
+      };
+    });
+    return delay(flows);
+  }
+
+  // Sent count attributable to a playbook — outbound `sent` messages whose id
+  // carries the playbook key (enrolled drafts that were later approved) plus, for
+  // the missed-call flow, the auto-ack sends. Derived from the store (no fixture
+  // stat), so it moves as the demo loop runs.
+  private playbookSentCount(key: string): number {
+    let n = 0;
+    for (const { msg } of this.allMessages()) {
+      if (msg.direction !== 'outbound' || msg.status !== 'sent') continue;
+      if (msg.id.includes(`_${key}_`) || msg.id.startsWith(`msg_pb_${key}_`)) n += 1;
+    }
+    return n;
+  }
+
+  // Replied count — threads carrying a playbook-attributed outbound that got a
+  // later customer inbound. Cheap heuristic over the store; single source only.
+  private playbookRepliedCount(key: string): number {
+    let n = 0;
+    for (const t of this.threads.values()) {
+      const idx = t.messages.findIndex(
+        (m) => m.direction === 'outbound' && (m.id.includes(`_${key}_`) || m.id.startsWith(`msg_pb_${key}_`)),
+      );
+      if (idx >= 0 && t.messages.slice(idx + 1).some((m) => m.direction === 'inbound')) n += 1;
+    }
+    return n;
+  }
+
   bookingConnection(): Promise<{ provider: string; status: 'connected'; calendar: string }> {
     return delay({
       provider: BOOKING_CONNECTION.provider,
@@ -1554,16 +1758,25 @@ export class DemoClient implements DataClient {
     const sentBodies = this.sentOutboundBodies(t);
     const norm = (s: string): string => s.trim().toLowerCase();
 
+    // Steering (r10): the goal the human set on this thread, if any. When present
+    // the suggestion works the goal in NATURALLY — a concrete time offer, a
+    // payment nudge tied to real context, the missing-fact ask, or the document
+    // ask — with an optional free-text note woven in. It still respects the ladder
+    // and the anti-repeat rule; a FRESH steer resets one rung (a one-time credit).
+    const steer = this.steers.get(conversationId) ?? null;
+
     // (b) A held draft awaiting approval IS the suggestion. Rationale is built
     // from the contact's real data (renewal proximity, memory atoms), not prose.
     const heldDraft = [...t.messages].reverse().find((m) => m.status === 'awaiting_approval');
     if (heldDraft) {
+      const rationale = this.rationaleFor(c, hasMem);
+      if (steer) rationale.unshift(this.steerRationale(steer.goal));
       return delay({
         body: heldDraft.body,
         playbookLabel: this.playbookLabelFor(heldDraft),
         held: true,
         draftId: heldDraft.id,
-        rationale: this.rationaleFor(c, hasMem),
+        rationale: rationale.slice(0, 3),
       });
     }
 
@@ -1593,14 +1806,36 @@ export class DemoClient implements DataClient {
     // own AND the human's outbound as "ours"; a customer reply resets the rung).
     const unanswered = this.trailingUnansweredSends(t);
     if (unanswered >= 1) {
+      // A FRESH steer resets ONE rung: the human explicitly asked for an action,
+      // so a state the ladder would otherwise silence (rung ≥2, or a rung-1 send
+      // still < 1h old) may produce ONE steered suggestion. The credit is consumed
+      // here so a stale steer doesn't keep re-firing. Anti-repeat still guards it.
+      const ageMs = this.now() - new Date(lastMessage!.created_at).getTime();
+      const ladderWouldSilence = unanswered >= 2 || !(ageMs >= 60 * 60_000);
+      if (steer && this.steerResetArmed.has(conversationId) && ladderWouldSilence) {
+        this.steerResetArmed.delete(conversationId);
+        const steered = this.steeredSuggestion(c, first, hasMem, steer);
+        if (steered && !sentBodies.has(norm(steered.body))) {
+          return delay({ ...steered, held: false, draftId: undefined });
+        }
+        // No safe steered body left → fall through to the normal ladder rules.
+      }
+
       // Rung 2 (or deeper): two unanswered outbounds already — waiting is the
       // right move. A third text is what a good producer would NOT send.
       if (unanswered >= 2) return delay(null);
 
       // Rung 1: one unanswered outbound. Only nudge once it's aged ≥1h by the
       // demo clock — inside the hour a second text reads as pushy (keep the rule).
-      const ageMs = this.now() - new Date(lastMessage!.created_at).getTime();
       if (!(ageMs >= 60 * 60_000)) return delay(null);
+
+      // Steered rung-1 (aged ≥1h): the goal reshapes the nudge naturally.
+      if (steer) {
+        const steered = this.steeredSuggestion(c, first, hasMem, steer);
+        if (steered && !sentBodies.has(norm(steered.body))) {
+          return delay({ ...steered, held: false, draftId: undefined });
+        }
+      }
 
       // A shorter, DIFFERENT-ANGLE nudge grounded in memory atoms — never the
       // same pitch. Built by a dedicated builder; the final check still guards it.
@@ -1612,9 +1847,20 @@ export class DemoClient implements DataClient {
       return delay(null);
     }
 
-    // (d) The customer holds the ball (or the thread is fresh). Build the next-
-    // best message. Body sounds like the Hartley drafts: short, human, one
-    // question max, names Tom where natural. rationale cites the data.
+    // (d) The customer holds the ball (or the thread is fresh). When steered, the
+    // goal drives the next-best message directly — a concrete time offer, a
+    // payment nudge, a missing-fact ask, or a document ask — before the generic
+    // renewal/lapsed/lead routing. Anti-repeat still guards the final body.
+    if (steer) {
+      const steered = this.steeredSuggestion(c, first, hasMem, steer);
+      if (steered && !sentBodies.has(norm(steered.body))) {
+        this.steerResetArmed.delete(conversationId);
+        return delay({ ...steered, held: false, draftId: undefined });
+      }
+    }
+
+    // Build the next-best message. Body sounds like the Hartley drafts: short,
+    // human, one question max, names Tom where natural. rationale cites the data.
     const scopes = this.consentScopes(c.id);
     const rationale: string[] = [];
     let body: string;
@@ -1632,23 +1878,23 @@ export class DemoClient implements DataClient {
       if (afterSix) rationale.push('Prefers texts after 6pm');
       if (hasMem('teenage driver')) rationale.push('Teenage driver starting this fall');
       const timeHint = afterSix ? 'this evening' : 'this week';
-      body = `Hi ${first} — your ${c.lob ?? 'policy'} renews ${this.friendlyDate(
+      body = `Hey ${first} — your ${c.lob ?? 'policy'} renews ${this.friendlyDate(
         c.xDateDays!,
-      )}. Tom set aside time to go over your options first. Want to grab 15 minutes ${timeHint}?`;
+      )}. Tom kept time open to go over your options first. Want to grab 15 minutes ${timeHint}?`;
     } else if (lapsed && customerWaiting && /quote|number|refresh|deciding|still/.test(inboundText)) {
       // They replied to a lapsed-quote nudge and are still deciding — offer the
       // refresh they asked about. Grounded in the actual inbound keywords.
       playbookLabel = 'Win back lapsed quotes';
       rationale.push('Quote lapsed — customer still deciding');
       rationale.push(`Their last reply: “${this.trim(lastInbound!.body, 48)}”`);
-      body = `No rush ${first} — want me to have Tom refresh those numbers so you're comparing the latest? Happy to hold your prior quote while you decide.`;
+      body = `No rush ${first} — want me to have Tom refresh those numbers so you're seeing the latest? Happy to hold your prior quote while you decide.`;
     } else if (lapsed) {
       // A cold lapsed quote we can reactivate (marketing consent required to send;
       // the gate enforces it — we suggest honestly and let the gate decide).
       playbookLabel = 'Win back lapsed quotes';
       rationale.push('Quote lapsed — reactivation candidate');
       if (!scopes.has('marketing')) rationale.push('No marketing consent — gate will hold');
-      body = `Hi ${first} — your quote from earlier this year is about to expire. Rates moved recently, so it's worth a fresh look. Want Tom to pull updated numbers?`;
+      body = `Hey ${first} — that quote from earlier this year is about to expire. Rates have moved since, so it's worth a fresh look. Want Tom to pull updated numbers?`;
     } else if (c.status === 'new_lead') {
       // A new lead who reached out — speed-to-lead follow-up. If they asked a
       // coverage question we keep it non-advisory (Tom answers the specifics).
@@ -1656,9 +1902,9 @@ export class DemoClient implements DataClient {
       rationale.push('New lead — reached out about a quote');
       if (/liability|coverage|limit/.test(inboundText)) {
         rationale.push('Asked about coverage limits — Tom to advise');
-        body = `Hi ${first} — good question on the limits. Tom can walk you through what fits your situation; want a quick call this week to lock in your numbers?`;
+        body = `Hey ${first} — good question on the limits. Tom can walk you through what fits your situation. Want a quick call this week to lock in your numbers?`;
       } else {
-        body = `Hi ${first} — thanks for reaching out about a quote. I can pull your numbers together today; what's a good time for a quick call?`;
+        body = `Hey ${first} — thanks for reaching out about a quote! I can pull your numbers together today. What's a good time for a quick call?`;
       }
       if (autoOnly) rationale.push('Auto only — bundle candidate');
     } else if (autoOnly) {
@@ -1667,7 +1913,7 @@ export class DemoClient implements DataClient {
       playbookLabel = 'Bundle upsell';
       rationale.push('Auto only — bundle candidate');
       if (!scopes.has('marketing')) rationale.push('No marketing consent — gate will hold');
-      body = `Hi ${first} — you're insured on auto with us. Bundling your home policy usually trims both premiums. Want Tom to run the combined number?`;
+      body = `Hey ${first} — you're with us on auto already. Bundling your home policy usually trims both premiums. Want Tom to run the combined number?`;
     } else {
       // Nothing actionable stands out — silence beats a filler text.
       return delay(null);
@@ -1768,6 +2014,84 @@ export class DemoClient implements DataClient {
     return null;
   }
 
+  // A short "Steered: …" rationale entry naming the goal the human set.
+  private steerRationale(goal: SteerGoal): string {
+    const label: Record<SteerGoal, string> = {
+      book_time: 'Steered: book a time',
+      take_payment: 'Steered: take payment',
+      collect_info: 'Steered: collect the missing info',
+      request_document: 'Steered: request a document',
+    };
+    return label[goal];
+  }
+
+  // A STEERED next-best message — the human set a goal, so we work it in
+  // NATURALLY (never a canned line), grounded in the contact's real data. Warm
+  // business-casual, ≤2 sentences, one question, no emojis. The free-text note is
+  // woven in when present. Returns null only if no honest steered body exists.
+  private steeredSuggestion(
+    c: FixtureContact,
+    first: string,
+    hasMem: (needle: string) => boolean,
+    steer: { goal: SteerGoal; note?: string },
+  ): { body: string; playbookLabel: string; rationale: string[] } | null {
+    const rationale: string[] = [this.steerRationale(steer.goal)];
+    // A note like "mention the bundle discount" gets its own quiet rationale line
+    // and a natural clause woven into the body (offset with an em-dash so it reads
+    // cleanly wherever it lands, before the closing question).
+    const noteClause = steer.note ? ` — and I can ${this.lowerFirst(steer.note)}` : '';
+    if (steer.note) rationale.push(`Your note: “${this.trim(steer.note, 40)}”`);
+
+    const afterSix = hasMem('after 6pm') || hasMem('evening');
+    const renewsSoon = c.xDateDays !== null && c.xDateDays >= 0 && c.xDateDays <= 45;
+
+    if (steer.goal === 'book_time') {
+      // Concrete time offer against the booking connection + the after-6pm memory.
+      if (afterSix) rationale.push('Prefers texts after 6pm');
+      rationale.push(`Booking: ${BOOKING_CONNECTION.calendar}`);
+      const slot = afterSix ? 'Thursday at 6:30' : 'Thursday at 2';
+      const body = `Hey ${first} — want me to lock in a time with Tom? ${slot} is open if that works${noteClause}.`;
+      return { body, playbookLabel: 'Book a time', rationale: rationale.slice(0, 3) };
+    }
+
+    if (steer.goal === 'take_payment') {
+      // Natural payment nudge tied to real context (a renewal that's due).
+      const context = renewsSoon
+        ? `since your renewal lands ${this.friendlyDate(c.xDateDays!)}`
+        : 'whenever it’s convenient';
+      if (renewsSoon) rationale.push(`Renews ${this.friendlyDate(c.xDateDays!)} (${c.xDateDays} days)`);
+      const body = `Hey ${first} — I can text you a secure link to take care of the premium ${context}${noteClause}. Want me to send it over?`;
+      return { body, playbookLabel: 'Take payment', rationale: rationale.slice(0, 3) };
+    }
+
+    if (steer.goal === 'collect_info') {
+      // Ask for the missing fact the agent actually lacks. For an Auto+Home
+      // renewal that's the home declarations page (same gap agentAsks surfaces);
+      // otherwise the general "what we're missing" — the coverage they want quoted.
+      if (c.lob === 'Auto+Home' && renewsSoon) {
+        rationale.push('Bundle quote needs the current dec page');
+        const body = `Hey ${first} — to quote the auto+home bundle at renewal I just need your current home declarations page${noteClause}. Could you send it over when you get a sec?`;
+        return { body, playbookLabel: 'Collect info', rationale: rationale.slice(0, 3) };
+      }
+      rationale.push('Missing the details to quote accurately');
+      const body = `Hey ${first} — to get your numbers exactly right I just need a couple quick details on your coverage${noteClause}. Mind if I grab those?`;
+      return { body, playbookLabel: 'Collect info', rationale: rationale.slice(0, 3) };
+    }
+
+    // request_document — mirrors the document ask (a phone pic is fine).
+    const docType = c.lob === 'Auto+Home' || c.lob === 'Home' ? 'home declarations page' : 'driver’s license';
+    rationale.push(`Needs the ${docType}`);
+    const body = `Hey ${first} — could you text over a quick photo of your ${docType}? A phone pic works great${noteClause}.`;
+    return { body, playbookLabel: 'Request a document', rationale: rationale.slice(0, 3) };
+  }
+
+  // Lowercase the first character of a free-text note so it reads inside a clause
+  // ("I can mention the bundle discount too"). No other mutation.
+  private lowerFirst(s: string): string {
+    const t = s.trim();
+    return t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+  }
+
   // Rationale for a HELD draft — cites the contact's real data (renewal window,
   // memory atoms) rather than restating the draft prose. 1–3 short reasons.
   private rationaleFor(c: FixtureContact, hasMem: (needle: string) => boolean): string[] {
@@ -1781,6 +2105,20 @@ export class DemoClient implements DataClient {
     if (c.status === 'lapsed_quote' && reasons.length < 3) reasons.push('Quote lapsed — reactivation candidate');
     if (reasons.length === 0) reasons.push(`On the ${c.lob ?? 'no'} line`);
     return reasons.slice(0, 3);
+  }
+
+  // Which playbook governs the agent's held reply-draft to an inbound on this
+  // thread — so turning that playbook OFF stands the reply choreography down.
+  // Mirrors the base-suggestion routing: a near renewal → renewal_reminder;
+  // a new lead → speed_to_lead; a lapsed quote → winback_lapsed; else the
+  // renewal_reminder key (the default reply playbook).
+  private inboundReplyPlaybookKey(t: FixtureThread): string {
+    const c = contactById(t.contactId);
+    if (!c) return 'renewal_reminder';
+    if (c.xDateDays !== null && c.xDateDays >= 0 && c.xDateDays <= 45) return 'renewal_reminder';
+    if (c.status === 'new_lead') return 'speed_to_lead';
+    if (c.status === 'lapsed_quote') return 'winback_lapsed';
+    return 'renewal_reminder';
   }
 
   // Map a held draft to a plain playbook label from its id / classification.

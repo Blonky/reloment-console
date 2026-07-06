@@ -6,6 +6,7 @@
 import type { DataClient } from './client.ts';
 import type {
   AgentAsk,
+  AgentProfile,
   ApproveResult,
   AuditRow,
   BookRow,
@@ -19,8 +20,10 @@ import type {
   HomeBriefing,
   HomePulse,
   InboundResult,
+  PlaybookFlow,
   QueueItem,
   SearchHit,
+  SteerGoal,
   Suggestion,
   ThreadBrief,
   ThreadDetail,
@@ -182,6 +185,15 @@ export class HttpClient implements DataClient {
     return this.post<InboundResult>('/api/simulate/inbound', { conversationId, text });
   }
 
+  // Steering (r10): POST the per-conversation goal (null clears). A missing or
+  // failing route degrades to a silent no-op rather than throwing at the UI.
+  async steer(conversationId: string, goal: SteerGoal | null, note?: string): Promise<void> {
+    await this.post<{ ok: boolean }>(
+      `/api/threads/${encodeURIComponent(conversationId)}/steer`,
+      { goal, note },
+    ).catch(() => undefined);
+  }
+
   // ── Operations (round 7) ────────────────────────────────────────────────────
   // A missed call arrives via the voice-capture forward and the provider emits
   // it on the SSE stream; here we ask the backend to simulate one for the demo.
@@ -254,6 +266,20 @@ export class HttpClient implements DataClient {
       '/api/tools/campaign_status',
     );
     return playbooks;
+  }
+
+  // Playbook flows for the merged Agent tab — served empty rather than faked when
+  // the route is absent, so the Agent surface degrades honestly against a backend.
+  async playbookFlows(): Promise<PlaybookFlow[]> {
+    return this.req<PlaybookFlow[]>('/api/playbook-flows').catch(() => []);
+  }
+
+  // Turn a playbook on/off for the tenant. A missing/failing route is a silent
+  // no-op (the UI's optimistic toggle stands until the next read).
+  async setPlaybookEnabled(key: string, enabled: boolean): Promise<void> {
+    await this.post<{ ok: boolean }>('/api/playbook-flows/toggle', { key, enabled }).catch(
+      () => undefined,
+    );
   }
 
   async threadBrief(contactId: string): Promise<ThreadBrief> {
@@ -329,6 +355,24 @@ export class HttpClient implements DataClient {
       trainedOn: 'Not yet tuned — connect the platform to train on your conversations.',
       traits: [],
       example: { generic: '', tuned: '' },
+    }));
+  }
+
+  // Agent profile (r10) — the merged Agent surface's identity card. Degrades to
+  // an honest untuned placeholder with the fixed guardrails still shown.
+  async agentProfile(): Promise<AgentProfile> {
+    return this.req<AgentProfile>('/api/agent-profile').catch(() => ({
+      name: 'Your concierge',
+      line: '—',
+      trainedOn: 'Not yet tuned — connect the platform to train on your conversations.',
+      traits: [],
+      example: { generic: '', tuned: '' },
+      guardrails: [
+        'Never gives coverage or legal advice — routes to a licensed human',
+        'Only texts people with consent on file — the gate refuses everything else',
+        'Respects quiet hours in the customer’s timezone',
+        'STOP always sticks — only the customer can opt back in',
+      ],
     }));
   }
 

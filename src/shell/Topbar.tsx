@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { StatusPill } from '../components/index.ts';
+import DemoControls from './DemoControls.tsx';
 import styles from './Topbar.module.css';
 
 export interface TopbarProps {
@@ -75,7 +75,7 @@ export default function Topbar({ title, mode, killSwitch, onOpenPalette, onOpenN
           <span className={styles.paletteKbd}>{isMac ? '⌘' : 'Ctrl'}</span>
           <span className={styles.paletteKbd}>K</span>
         </button>
-        {mode === 'demo' && <StatusPill tone="info">Demo data</StatusPill>}
+        {mode === 'demo' && <DemoControls />}
         <span className={styles.sending}>
           <span className={styles.dot} />
           Sending active

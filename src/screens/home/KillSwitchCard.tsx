@@ -56,7 +56,7 @@ export default function KillSwitchCard({ mode, onConfirm }: KillSwitchCardProps)
           >
             {mode === 'pause'
               ? 'The kill switch is on. Every outbound send is blocked at the gate until you resume.'
-              : 'The kill switch is off. The agents can send again, subject to the usual gate.'}
+              : 'The kill switch is off. The agent can send again, subject to the usual gate.'}
           </span>
         </div>
       </div>
@@ -84,7 +84,7 @@ export default function KillSwitchCard({ mode, onConfirm }: KillSwitchCardProps)
               </>
             ) : (
               <>
-                This lifts the kill switch and lets the agents send again. Type{' '}
+                This lifts the kill switch and lets the agent send again. Type{' '}
                 <span className={`${styles.confirmWord} ${styles.confirmWordResume}`}>
                   resume
                 </span>{' '}

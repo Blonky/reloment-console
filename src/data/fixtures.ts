@@ -245,7 +245,7 @@ const danaThread: FixtureThread = {
     msg('inbound', 'Hey is my policy going up again this year??', -95),
     msg(
       'outbound',
-      'Hi Dana — your auto+home renews Jul 28. Rates shifted this year, so Tom’s set aside time to review your options before anything changes. Want Thursday at 5:30, after work?',
+      'Hey Dana — I hear you. Your auto+home renews Jul 28, and Tom kept time open to walk through your options before anything changes. Want Thursday at 5:30, after work?',
       -90,
       { status: 'awaiting_approval', channel: null, cls: 'transactional' },
     ),
@@ -277,7 +277,7 @@ const priyaThread: FixtureThread = {
   messages: [
     msg(
       'outbound',
-      'Hi Priya — your home quote from June is set to expire. Want me to have Tom refresh the numbers?',
+      'Hey Priya — your home quote from June is about to expire. Want me to have Tom refresh the numbers?',
       -1450,
       { channel: 'imessage' },
     ),
@@ -292,14 +292,14 @@ const jordanThread: FixtureThread = {
   messages: [
     msg(
       'outbound',
-      'Hi Jordan — noticed your auto policy lapsed last month. If timing was the issue, Tom found a way to keep your old rate.',
+      'Hey Jordan — noticed your auto policy lapsed last month. If it was just timing, Tom found a way to hold onto your old rate.',
       -8700,
       { channel: 'sms' },
     ),
     msg('inbound', 'ok yeah let’s do it 🙌', -8680),
     msg(
       'outbound',
-      'You’re in 🎉 Renewal confirmed at your prior rate. Tom will call to finalize.',
+      'You’re in — renewal confirmed at your prior rate. Tom will call to finalize.',
       -8670,
       { channel: 'sms' },
     ),
@@ -340,7 +340,7 @@ export const PLAYBOOKS: FixturePlaybook[] = [
     classification: 'transactional',
     status: 'active',
     template:
-      'Hi {first_name} — your policy renews soon. Tom’s set aside time to review your options before anything changes. Want to grab 15 minutes this week?',
+      'Hey {first_name} — your policy comes up for renewal soon. Tom kept some time open to walk through your options before anything changes. Want to grab 15 minutes this week?',
     counselSigned: true,
   },
   {
@@ -349,7 +349,7 @@ export const PLAYBOOKS: FixturePlaybook[] = [
     classification: 'transactional',
     status: 'active',
     template:
-      'Hi {first_name} — thanks for reaching out about a quote. I can get your numbers together today; what’s the best time for a quick call?',
+      'Hey {first_name} — thanks for reaching out about a quote! I can get your numbers together today. When’s a good time for a quick call?',
     counselSigned: true,
   },
   {
@@ -358,7 +358,7 @@ export const PLAYBOOKS: FixturePlaybook[] = [
     classification: 'marketing',
     status: 'active',
     template:
-      'Hi {first_name} — your quote from earlier this year is about to expire. Rates moved recently, so it’s worth a fresh look before it does. Want updated numbers?',
+      'Hey {first_name} — that quote from earlier this year is about to expire. Rates have moved since, so it’s worth a fresh look. Want me to pull updated numbers?',
     counselSigned: true,
     autonomy: 'draft',
     description:
@@ -370,7 +370,7 @@ export const PLAYBOOKS: FixturePlaybook[] = [
     classification: 'transactional',
     status: 'active',
     template:
-      'Sorry we missed your call — this is Hartley Insurance’s text line. How can we help?',
+      'Hey — sorry we missed you! This is Hartley Insurance’s text line. What can we help with?',
     counselSigned: true,
     trigger: 'call.missed',
     autonomy: 'auto_send_ack',
@@ -383,7 +383,7 @@ export const PLAYBOOKS: FixturePlaybook[] = [
     classification: 'marketing',
     status: 'active',
     template:
-      'Hi {first_name} — you’re insured on auto with us. Bundling your home policy usually trims both premiums. Want Tom to run the combined number?',
+      'Hey {first_name} — you’re with us on auto already. Bundling your home policy usually trims both premiums. Want Tom to run the combined number?',
     counselSigned: true,
     autonomy: 'draft',
     description:
@@ -393,6 +393,20 @@ export const PLAYBOOKS: FixturePlaybook[] = [
 
 export const playbookByKey = (key: string): FixturePlaybook | undefined =>
   PLAYBOOKS.find((p) => p.key === key);
+
+// Seeded per-playbook history — the book's prior activity before this session,
+// consistent with the thread narrative (Marcus replied to speed-to-lead; Priya
+// and Jordan both replied to win-back; Jordan renewed and fed the outcomes).
+// campaignStatus() and playbookFlows() BOTH read this baseline plus live
+// session deltas, so the two surfaces can never disagree. Missed-call and
+// bundle-upsell are newly enabled flows — zero history is honest.
+export const PLAYBOOK_HISTORY: Record<string, { enrolled: number; sent: number; replied: number }> = {
+  renewal_reminder: { enrolled: 3, sent: 3, replied: 2 },
+  speed_to_lead: { enrolled: 1, sent: 1, replied: 1 },
+  winback_lapsed: { enrolled: 2, sent: 2, replied: 2 },
+  missed_call: { enrolled: 0, sent: 0, replied: 0 },
+  bundle_upsell: { enrolled: 0, sent: 0, replied: 0 },
+};
 
 // ── Outcomes (seed.ts outcome_event rows — Jordan, $4,120 total) ────────────
 export interface FixtureOutcome {
@@ -523,7 +537,7 @@ export const TONE_PROFILE = {
     generic:
       'Dear valued customer, your policy is approaching its renewal date. Please contact our office at your earliest convenience to discuss your coverage options and any applicable rate adjustments.',
     tuned:
-      'Hi Dana — your auto+home renews Jul 28. Rates shifted this year, so Tom’s set aside time to go over your options first. Want Thursday at 5:30, after work?',
+      'Hey Dana — I hear you. Your auto+home renews Jul 28, and Tom kept time open to walk through your options first. Want Thursday at 5:30, after work?',
   },
 } as const;
 

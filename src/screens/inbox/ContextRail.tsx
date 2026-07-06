@@ -9,25 +9,37 @@
 //   (d) MEMORY   — atoms as quiet bullets, capped at 3 with a "+N more" toggle.
 //   (e) ASKS     — the agent's contact-scoped asks for THIS contact (ask + why),
 //                  a quiet accent left border.
-//   (f) DEMO     — a visually distinct inset block ("{First}'s phone · demo") to
-//                  play the customer and watch the loop respond. Document-request
-//                  chips have moved OUT to the composer ＋ menu.
+//   (f) STEER    — "Steer the agent": four ghost goal chips (Book a time / Take a
+//                  payment / Collect info / Request a doc) + an optional note that
+//                  appears once a goal is active. Selecting a goal calls steer();
+//                  re-clicking clears it. The suggestion slot morphs toward the
+//                  goal via the existing suggestion.updated flow. Hidden when the
+//                  contact is opted out — there is nothing to steer.
 //
 // The whole rail must fit unscrolled at 1512×860 — Memory collapses behind the
-// "+N more" toggle so the panel stays tight.
+// "+N more" toggle so the panel stays tight. (Demo affordances moved OUT of the
+// rail to the topbar "Demo controls" popover in r10.)
 
 import { useEffect, useMemo, useState } from 'react';
 import { ConsentChips, Skeleton } from '../../components/index.ts';
-import type { AgentAsk, ConversationBrief, ThreadDetail } from '../../data/types.ts';
+import type { AgentAsk, ConversationBrief, SteerGoal, ThreadDetail } from '../../data/types.ts';
 import { useClient } from '../../shell/ClientContext.tsx';
-import { firstNameOf, shortDate } from './inboxUtils.ts';
-import { SendIcon, SparkleIcon } from './icons.tsx';
+import { shortDate } from './inboxUtils.ts';
+import { SparkleIcon } from './icons.tsx';
 import styles from './InboxScreen.module.css';
+
+// The four goals the producer can point the agent at, in plain language. The
+// suggestion engine weaves the chosen goal in naturally (never a canned line).
+const STEER_GOALS: { goal: SteerGoal; label: string }[] = [
+  { goal: 'book_time', label: 'Book a time' },
+  { goal: 'take_payment', label: 'Take a payment' },
+  { goal: 'collect_info', label: 'Collect info' },
+  { goal: 'request_document', label: 'Request a doc' },
+];
 
 export interface ContextRailProps {
   detail: ThreadDetail | undefined;
   loading: boolean;
-  onSimulate: (text: string) => Promise<void>;
   // Opens the shared ConversationBrief Inspector (Q&A + key moments).
   onOpenBrief: () => void;
   // A nonce that bumps after any mutation so the rail re-derives the brief +
@@ -70,26 +82,29 @@ function RailSkeleton() {
 export default function ContextRail({
   detail,
   loading,
-  onSimulate,
   onOpenBrief,
   refreshKey,
   variant = 'docked',
   onClose,
 }: ContextRailProps) {
   const client = useClient();
-  const [draftReply, setDraftReply] = useState('');
-  const [sending, setSending] = useState(false);
   const [memoryExpanded, setMemoryExpanded] = useState(false);
   const [brief, setBrief] = useState<ConversationBrief | null>(null);
   const [asks, setAsks] = useState<AgentAsk[]>([]);
+  // Steering (r10): the active goal + note for THIS conversation. We track it
+  // locally (there's no getter) and reset on conversation change. steer() is
+  // fire-and-forget; the suggestion slot morphs via suggestion.updated.
+  const [steerGoal, setSteerGoal] = useState<SteerGoal | null>(null);
+  const [steerNote, setSteerNote] = useState('');
   const conversationId = detail?.conversation.id;
   const contactId = detail?.conversation.contact_id;
   const isSheet = variant === 'sheet';
 
-  // Clear the composer + collapse memory when the selected conversation changes.
+  // Collapse memory + clear the local steer state when the conversation changes.
   useEffect(() => {
-    setDraftReply('');
     setMemoryExpanded(false);
+    setSteerGoal(null);
+    setSteerNote('');
   }, [conversationId]);
 
   // Fold the conversation summary INTO the rail — refetched when the thread
@@ -160,16 +175,25 @@ export default function ContextRail({
     </div>
   ) : null;
 
-  async function send(text: string) {
-    const body = text.trim();
-    if (body === '' || sending) return;
-    setSending(true);
-    try {
-      await onSimulate(body);
-      setDraftReply('');
-    } finally {
-      setSending(false);
+  // Select a goal (or clear it by re-clicking the active one). We push the goal
+  // with the current note; the suggestion slot re-weaves it via suggestion.updated.
+  function selectGoal(goal: SteerGoal) {
+    if (conversationId === undefined) return;
+    if (steerGoal === goal) {
+      setSteerGoal(null);
+      setSteerNote('');
+      void client.steer(conversationId, null);
+      return;
     }
+    setSteerGoal(goal);
+    void client.steer(conversationId, goal, steerNote.trim() || undefined);
+  }
+
+  // Re-push the steer with the edited note (debounced by the caller's blur/Enter)
+  // so the woven clause updates. Only meaningful while a goal is active.
+  function applyNote() {
+    if (conversationId === undefined || steerGoal === null) return;
+    void client.steer(conversationId, steerGoal, steerNote.trim() || undefined);
   }
 
   if (loading || detail === undefined) {
@@ -185,7 +209,6 @@ export default function ContextRail({
 
   const { conversation, memory, consents } = detail;
   const renewal = shortDate(conversation.x_date);
-  const first = firstNameOf(conversation.display_name);
   const facts = [
     conversation.lob,
     policyLabel(conversation.policy_status),
@@ -303,61 +326,50 @@ export default function ContextRail({
           </div>
         )}
 
-        {/* (f) DEMO — a distinct inset block: play the customer, watch the loop.
-            The doc-request chips have moved to the composer ＋ menu. */}
-        <div className={styles.railDemo}>
-          <span className={styles.railDemoTitle}>{first}&rsquo;s phone · demo</span>
-          <span className={styles.railDemoCaption}>
-            Play the customer to watch the loop respond.
-          </span>
-          <div className={styles.simInputRow}>
-            <input
-              className={styles.simInput}
-              type="text"
-              value={draftReply}
-              placeholder="Type a reply as the customer…"
-              aria-label="Simulated customer message"
-              disabled={sending}
-              onChange={(e) => setDraftReply(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void send(draftReply);
-              }}
-            />
-            <button
-              type="button"
-              className={styles.railDemoSend}
-              aria-label="Send simulated reply"
-              disabled={sending || draftReply.trim() === ''}
-              onClick={() => void send(draftReply)}
-            >
-              <SendIcon size={15} />
-            </button>
-          </div>
-          <div className={styles.simChips}>
-            <button
-              type="button"
-              className={styles.simGhostChip}
-              disabled={sending}
-              onClick={() => void send('STOP')}
-            >
-              STOP
-            </button>
-            {detail.optedOut && (
-              <button
-                type="button"
-                className={styles.simGhostChip}
-                disabled={sending}
-                onClick={() => void send('START')}
-              >
-                START
-                <span className={styles.simChipCaption}>opts back in</span>
-              </button>
+        {/* (f) STEER — point the agent at a concrete goal. Hidden when opted out
+            (there's nothing to steer — the gate refuses every outbound). The
+            suggestion slot morphs toward the goal via suggestion.updated. */}
+        {!detail.optedOut && (
+          <div className={styles.railSteer}>
+            <span className={styles.railSteerTitle}>Steer the agent</span>
+            <span className={styles.railSteerCaption}>
+              Point it at a goal — the next-best message adapts.
+            </span>
+            <div className={styles.steerChips}>
+              {STEER_GOALS.map(({ goal, label }) => {
+                const active = steerGoal === goal;
+                return (
+                  <button
+                    key={goal}
+                    type="button"
+                    className={`${styles.steerChip} ${active ? styles.steerChipActive : ''}`}
+                    aria-pressed={active}
+                    onClick={() => selectGoal(goal)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {steerGoal !== null && (
+              <input
+                className={styles.steerNote}
+                type="text"
+                value={steerNote}
+                placeholder="e.g. mention the bundle discount"
+                aria-label="Optional note for the agent"
+                onChange={(e) => setSteerNote(e.target.value)}
+                onBlur={applyNote}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    applyNote();
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+              />
             )}
           </div>
-          <span className={styles.simHint}>
-            {detail.optedOut ? 'Only the customer can opt back in.' : 'STOP records an opt-out.'}
-          </span>
-        </div>
+        )}
       </div>
     </aside>
   );

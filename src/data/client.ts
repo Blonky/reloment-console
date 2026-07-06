@@ -4,6 +4,7 @@
 
 import type {
   AgentAsk,
+  AgentProfile,
   ApproveResult,
   AuditRow,
   BookRow,
@@ -19,8 +20,10 @@ import type {
   InboundResult,
   LineAgent,
   OutcomeRow,
+  PlaybookFlow,
   QueueItem,
   SearchHit,
+  SteerGoal,
   Suggestion,
   ThreadBrief,
   ThreadDetail,
@@ -59,6 +62,14 @@ export interface DataClient {
   suggestion(conversationId: string): Promise<Suggestion | null>;
   simulateInbound(conversationId: string, text: string): Promise<InboundResult>;
 
+  // Steering (r10): the human sets (or clears with null) a per-conversation goal
+  // the agent should work toward — book a time, take a payment, collect a missing
+  // fact, or request a document — with an optional free-text note woven in. The
+  // suggestion engine incorporates it NATURALLY (never a canned line) and still
+  // respects the follow-up ladder + anti-repeat rule. Emits steer.changed +
+  // suggestion.updated so the composer's suggestion re-weaves the goal.
+  steer(conversationId: string, goal: SteerGoal | null, note?: string): Promise<void>;
+
   // Operations (round 7) — missed-call text-back, human follow-up, documents.
   // A missed call on the messaging-only line arrives via a voice-capture
   // forward; the text-back is auto-sent (inquiry basis) but still passes the
@@ -86,7 +97,15 @@ export interface DataClient {
   // Command channel / tools
   queryBook(kind: 'renewals' | 'lapsed'): Promise<BookRow[]>;
   enrollPlaybook(playbookKey: string): Promise<EnrollResult>;
+  // Home artifact still reads campaignStatus(); the merged Agent tab reads the
+  // reshaped playbookFlows() — both derive from the SAME playbook/enrollment
+  // store (single source of truth).
   campaignStatus(): Promise<CampaignRow[]>;
+  playbookFlows(): Promise<PlaybookFlow[]>;
+  // Turn a playbook on/off for the whole tenant (session state; default all on).
+  // A disabled playbook stops producing drafts/acks in the inbound + missed-call
+  // choreography and drops out of homeBriefing. Emits playbook.toggled.
+  setPlaybookEnabled(key: string, enabled: boolean): Promise<void>;
   threadBrief(contactId: string): Promise<ThreadBrief>;
   searchConversations(q: string): Promise<SearchHit[]>;
   setKillSwitch(on: boolean): Promise<void>;
@@ -105,6 +124,9 @@ export interface DataClient {
   // Producer worklist + tuning / scheduling read-models (round 7).
   callList(): Promise<CallListRow[]>;
   toneProfile(): Promise<ToneProfile>;
+  // The single "Agent" surface's identity card (r10): name, line, voice, and the
+  // fixed guardrails it operates under. Composed from the tone profile + line.
+  agentProfile(): Promise<AgentProfile>;
   bookingConnection(): Promise<{ provider: string; status: 'connected'; calendar: string }>;
 
   // The Connections surface (Trust & Settings): the five wires the agency
