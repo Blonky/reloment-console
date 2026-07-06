@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
-import Sidebar, { SidebarNav } from './Sidebar.tsx';
+import Sidebar, { SidebarNav, SidebarSearch } from './Sidebar.tsx';
 import Topbar from './Topbar.tsx';
 import CommandPalette from './CommandPalette.tsx';
 import styles from './AppShell.module.css';
@@ -55,7 +55,7 @@ export default function AppShell({ killSwitch, mode, title, children }: AppShell
 
   return (
     <div className={styles.shell}>
-      <Sidebar />
+      <Sidebar onOpenPalette={openPalette} />
       <div className={styles.column}>
         <Topbar
           title={title}
@@ -105,6 +105,12 @@ export default function AppShell({ killSwitch, mode, title, children }: AppShell
                 </svg>
               </button>
             </div>
+            <SidebarSearch
+              onOpenPalette={() => {
+                closeNav();
+                openPalette();
+              }}
+            />
             <SidebarNav onNavigate={closeNav} />
           </nav>
         </>

@@ -36,6 +36,8 @@ import {
   SearchCard,
   HelpCard,
 } from './ReplyCards.tsx';
+import type { ReplyMeta } from './ReplyCards.tsx';
+import { disclosureFor } from './gateChecks.ts';
 import KillSwitchCard from './KillSwitchCard.tsx';
 import type { KillSwitchMode } from './KillSwitchCard.tsx';
 import {
@@ -209,30 +211,55 @@ export default function HomeScreen() {
     [client, setKillSwitch, pulse],
   );
 
-  // Dispatch a parsed intent to its governed tool + render the reply card.
+  // Dispatch a parsed intent to its governed tool + render the reply card. Each
+  // tool call is wrapped in a real performance.now() delta so the gate
+  // disclosure shows an HONEST run duration (never invented per-check timing).
   const dispatch = useCallback(
     async (intent: Intent) => {
       switch (intent.kind) {
         case 'renewals': {
+          const t0 = performance.now();
           const rows = await client.queryBook('renewals');
-          resolveThinking(<BookCard kind="renewals" rows={rows} />);
+          const meta: ReplyMeta = {
+            disclosure: disclosureFor(intent),
+            durationMs: performance.now() - t0,
+          };
+          resolveThinking(<BookCard kind="renewals" rows={rows} meta={meta} />);
           break;
         }
         case 'lapsed': {
+          const t0 = performance.now();
           const rows = await client.queryBook('lapsed');
-          resolveThinking(<BookCard kind="lapsed" rows={rows} />);
+          const meta: ReplyMeta = {
+            disclosure: disclosureFor(intent),
+            durationMs: performance.now() - t0,
+          };
+          resolveThinking(<BookCard kind="lapsed" rows={rows} meta={meta} />);
           break;
         }
         case 'enroll_winback': {
+          const t0 = performance.now();
           const result = await client.enrollPlaybook('winback_lapsed');
-          resolveThinking(<EnrollCard result={result} />);
+          const meta: ReplyMeta = {
+            disclosure: disclosureFor(intent, {
+              enrolledCount: result.enrolled.length,
+              excludedReasons: result.excluded.map((e) => e.reason),
+            }),
+            durationMs: performance.now() - t0,
+          };
+          resolveThinking(<EnrollCard result={result} meta={meta} />);
           pulse.refetch(); // "Needs your eyes" increments — the demo moment
           book.refetch();
           break;
         }
         case 'campaign_status': {
+          const t0 = performance.now();
           const rows = await client.campaignStatus();
-          resolveThinking(<CampaignCard rows={rows} />);
+          const meta: ReplyMeta = {
+            disclosure: disclosureFor(intent),
+            durationMs: performance.now() - t0,
+          };
+          resolveThinking(<CampaignCard rows={rows} meta={meta} />);
           break;
         }
         case 'brief': {
@@ -243,13 +270,25 @@ export default function HomeScreen() {
             );
             break;
           }
+          const t0 = performance.now();
           const brief = await client.threadBrief(contact.id);
-          resolveThinking(<BriefCard brief={brief} />);
+          const meta: ReplyMeta = {
+            disclosure: disclosureFor(intent),
+            durationMs: performance.now() - t0,
+          };
+          resolveThinking(<BriefCard brief={brief} meta={meta} />);
           break;
         }
         case 'search': {
+          const t0 = performance.now();
           const hits = await client.searchConversations(intent.query);
-          resolveThinking(<SearchCard query={intent.query} hits={hits} />);
+          const meta: ReplyMeta = {
+            disclosure: disclosureFor(intent),
+            durationMs: performance.now() - t0,
+          };
+          resolveThinking(
+            <SearchCard query={intent.query} hits={hits} meta={meta} />,
+          );
           break;
         }
         case 'pause': {

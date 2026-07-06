@@ -94,6 +94,67 @@ export function atomDate(index: number): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+// ── Data sources (the book-enrichment story, DESIGN.md §6) ──────────────────
+// One row per first-party source that enriches a contact, with what it
+// contributes and its freshness. Deterministic, relative to DEMO_NOW — no
+// cold-lead / prospecting sources (the consent gate is the product). Freshness
+// is derived per-contact from a stable hash so the rows read differently across
+// the book without any Math.random.
+
+export type DataSourceKind = 'ams' | 'conversations' | 'carrier';
+
+export interface DataSource {
+  kind: DataSourceKind;
+  name: string;
+  contribution: string;
+  freshness: string;
+}
+
+// A tiny stable hash over the contact id → a deterministic small integer.
+function stableHash(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    h = (h * 31 + seed.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+// "synced 2h ago" style freshness stepped off DEMO_NOW by a per-contact offset.
+function syncedAgo(seed: string): string {
+  const hours = 1 + (stableHash(seed) % 6); // 1–6h, deterministic per contact
+  return `synced ${hours}h ago`;
+}
+
+export function dataSourcesFor(contact: {
+  id: string;
+  lob: string | null;
+  x_date: string | null;
+}): DataSource[] {
+  const hasPolicy = contact.lob !== null || contact.x_date !== null;
+  return [
+    {
+      kind: 'ams',
+      name: 'AMS sync',
+      contribution: hasPolicy
+        ? 'Policy, renewal date, line of business'
+        : 'Contact record, line of business',
+      freshness: syncedAgo(contact.id),
+    },
+    {
+      kind: 'conversations',
+      name: 'Conversations',
+      contribution: 'Memory atoms, preferences',
+      freshness: 'live',
+    },
+    {
+      kind: 'carrier',
+      name: 'Carrier lookup',
+      contribution: 'Line type, reachability',
+      freshness: 'on send',
+    },
+  ];
+}
+
 export interface MemoryGroup {
   source: string;
   label: string;

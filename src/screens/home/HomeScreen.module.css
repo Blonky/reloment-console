@@ -512,13 +512,15 @@
   flex: none;
 }
 
-/* ── Reply cards (shared — rendered inside the transcript) ───────────────── */
+/* ── Replies (§5, "Artifacts, not dumps") ─────────────────────────────────────
+   A reply is a plain vertical stack: one narration sentence, a quiet gate
+   disclosure row, then a compact artifact card (or, for enroll, compact inline
+   rows). No bordered card chrome around the whole reply — the artifact card is
+   the visible object. */
 .reply {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   animation: home-card-in var(--dur) var(--ease);
 }
 
@@ -533,6 +535,23 @@
   }
 }
 
+/* The narration sentence — the reply's one line of prose. */
+.narration {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.narrationFollow {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.narrationFollow a {
+  font-weight: 600;
+}
+
+/* Kept for KillSwitchCard's inline confirm card, which stays a bordered card. */
 .replyHead {
   display: flex;
   align-items: center;
@@ -568,42 +587,251 @@
   color: var(--ink);
 }
 
-.replyLedeStrong {
-  font-weight: 600;
-}
-
-.followUp {
-  font-size: 13px;
-  color: var(--ink-2);
-}
-
-.followUp a {
-  font-weight: 600;
-}
-
-/* Table wrapper so wide tables scroll, never the page */
-.tableScroll {
-  overflow-x: auto;
-  margin: 0 -16px;
-  padding: 0 16px;
-}
-
 .muted {
   color: var(--ink-2);
 }
 
-.count {
+/* ── Gate disclosure (quiet collapsed row above the reply body) ───────────── */
+.gate {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gateRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.gateRow:hover {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+/* Static (read-only / control) variant — not a button, no chevron, no hover. */
+.gateRowStatic {
+  cursor: default;
+}
+
+.gateRowStatic:hover {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink-2);
+}
+
+.gateSummary {
+  white-space: nowrap;
+}
+
+.gateChevron {
+  flex: none;
+  transition: transform var(--dur) var(--ease);
+}
+
+.gateChevronOpen {
+  transform: rotate(90deg);
+}
+
+.gateDotNeutral {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-2);
+  opacity: 0.5;
+  flex: none;
+}
+
+.gateChecks {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  align-self: flex-start;
+  min-width: 280px;
+  max-width: 100%;
+  animation: home-card-in var(--dur) var(--ease);
+}
+
+.gateCheck {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.gateCheckDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.gateDotOk {
+  background: var(--ok);
+}
+
+.gateDotHold {
+  background: var(--hold);
+}
+
+.gateDotBlock {
+  background: var(--block);
+}
+
+.gateCheckLabel {
+  flex: 1;
+  min-width: 0;
+}
+
+.gateCheckNote {
+  flex: none;
+  font-size: 11px;
+  color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Enroll narration ───────────────────────────────────────────────────── */
-.enrollGroup {
+/* ── Artifact card (compact reply object → opens the Inspector) ────────────── */
+.artifact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur) var(--ease),
+    transform var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.artifact:hover {
+  box-shadow: var(--shadow-float);
+  transform: translateY(-1px);
+  border-color: var(--line-strong);
+}
+
+.artifactIcon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.artifactMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.artifactTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.artifactTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artifactCount {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.artifactSummary {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artifactAction {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* ── Inspector content (rendered inside the shared panel) ──────────────────── */
+.inspTableScroll {
+  overflow-x: auto;
+  margin: 0 -20px;
+  padding: 0 20px;
+}
+
+.inspFollowUp {
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-top: 12px;
+}
+
+.inspFollowUp a {
+  font-weight: 600;
+}
+
+.inspGroup {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.enrollGroupLabel {
+.inspGroup + .inspGroup {
+  margin-top: 18px;
+}
+
+.inspGroupLabel {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -612,6 +840,17 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--ink-2);
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Enroll narration (§5 exception — compact inline rows) ────────────────── */
+.enrollInline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .enrollGroupCount {

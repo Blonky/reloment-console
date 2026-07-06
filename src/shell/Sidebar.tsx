@@ -82,6 +82,51 @@ const ITEMS: NavItem[] = [
 
 const TENANT = 'Hartley Insurance Group';
 
+// Show ⌘K on Apple platforms, Ctrl K elsewhere.
+const isMac =
+  typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+
+const SearchGlyph = (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.5}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    className={styles.searchGlyph}
+  >
+    <circle cx="7" cy="7" r="4.5" />
+    <path d="M13.5 13.5 10.5 10.5" />
+  </svg>
+);
+
+// The search pill — a button styled as an input pill (magnifier + "Search" +
+// ⌘K kbd chip) that opens the command palette (§4). Sits under the wordmark on
+// desktop and inside the mobile drawer. `onOpenPalette` may be absent in
+// contexts that don't wire the palette (e.g. an isolated preview).
+export function SidebarSearch({ onOpenPalette }: { onOpenPalette?: () => void }) {
+  return (
+    <button
+      type="button"
+      className={styles.search}
+      onClick={onOpenPalette}
+      aria-label="Search screens and commands"
+      aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
+    >
+      {SearchGlyph}
+      <span className={styles.searchLabel}>Search</span>
+      <span className={styles.searchKbd}>
+        <span>{isMac ? '⌘' : 'Ctrl'}</span>
+        <span>K</span>
+      </span>
+    </button>
+  );
+}
+
 // The shared nav pills + tenant block. Reused by the desktop sidebar and the
 // mobile drawer. `onNavigate` lets the drawer close itself on a nav tap.
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
@@ -116,10 +161,11 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onOpenPalette }: { onOpenPalette?: () => void }) {
   return (
     <nav className={styles.sidebar} aria-label="Primary">
       <div className={styles.wordmark}>Reloment</div>
+      <SidebarSearch onOpenPalette={onOpenPalette} />
       <SidebarNav />
     </nav>
   );

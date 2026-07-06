@@ -168,10 +168,11 @@ Depth = paper vs white + soft shadow, never hard lines everywhere.
 ### Shell
 
 - **Sidebar (240px):** paper background (no border wall) — a quiet floating
-  column. Nav items are full pills (radius-pill): inactive = ink-2 text only;
-  hover = rgba ink 4% fill; active = **white pill + shadow-soft + ink text +
-  accent icon**. Wordmark in Fraunces. Tenant block bottom = compact white
-  pill card.
+  column. Under the wordmark, a **search pill** (magnifier + "Search" + ⌘K
+  kbd hint) that opens the command palette. Nav items are full pills
+  (radius-pill): inactive = ink-2 text only; hover = rgba ink 4% fill; active
+  = **white pill + shadow-soft + ink text + accent icon**. Wordmark in
+  Fraunces. Tenant block bottom = compact white pill card.
 - **Topbar:** no full-width border; it blends with the paper. Right side:
   "Demo data" pill + status dot pill. Kill-switch band stays a full red band.
 - Content `max-width: 1360px`, page padding 40px, 8px grid.
@@ -290,6 +291,21 @@ absorb the slack. Below 720px height, graceful scroll is acceptable.
 No topbars-within-cards, no channel chrome ("Command channel" head bar is
 gone) — the surface IS the channel. The kill-switch red band stays in the
 shell topbar.
+
+**Artifacts, not dumps (v3):** a command's reply in the transcript is at most
+three things — (1) one sentence of narration, (2) a **gate disclosure**: a
+quiet collapsed line "Ran the send gate · N checks · <duration>" that expands
+to the actual deterministic checks executed in order (kill switch → opt-out →
+consent → registration → quiet hours → …) with a pass/blocked dot per check,
+and (3) an **artifact card**: icon + title + count + one-line summary + "View
+table →". Clicking the artifact opens the **inspector** — a right side panel
+(desktop: 520px slide-in, shadow-float, Escape/scrim closes; phone:
+full-width sheet) that renders the full table/detail. Full tables NEVER
+render inline in the transcript. Exception: the enroll result keeps its
+enrolled/excluded GateReason rows inline (the exclusions ARE the product
+moment) but capped and compact, with the full run in the inspector.
+The inspector is a shared shell primitive — Contacts' detail panel and the
+Inbox context sheet converge on it.
 - **Command channel** (main): a chat column where the operator types intents.
   This milestone ships a **deterministic command router** (no LLM key needed):
   pattern-match intents → DataClient tool calls → rich structured replies
@@ -309,8 +325,12 @@ shell topbar.
 ## 6. Secondary screens (structured skeletons)
 
 - **Contacts**: table (name, phone, LOB, policy status, renewal, consent
-  chips, last activity) + a slide-in detail with the memory board (atoms
-  grouped by kind, provenance shown). Read-only.
+  chips, last activity) + a slide-in detail (the shared inspector) with the
+  memory board (atoms grouped by kind, provenance shown) AND a **Data
+  sources** section — the book-enrichment story: one row per source (AMS
+  sync, conversations, carrier lookup) with what it contributes and when it
+  last updated. First-party enrichment only; cold-lead enrichment is
+  deliberately out of scope (the consent gate is the product).
 - **Campaigns**: playbook cards (classification badge: transactional /
   marketing, counsel-signed mark) + per-run stats (enrolled / excluded / sent /
   replied) with the exclusion reasons visible — exclusions are a first-class

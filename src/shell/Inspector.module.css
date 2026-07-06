@@ -1,0 +1,106 @@
+/* Inspector — the shared right slide-in panel (DESIGN.md §5). Desktop: a 520px
+   panel pinned to the right with a square left edge, shadow-float, over a scrim.
+   ≤768px: a full-width sheet. Tokens from theme.css; 200ms motion-safe slide. */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(22, 25, 29, 0.28);
+  display: flex;
+  justify-content: flex-end;
+  animation: insp-fade var(--dur) var(--ease);
+}
+
+@keyframes insp-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.panel {
+  position: relative;
+  max-width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  /* Square left edge per §5 — a clean vertical seam against the app. */
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-float);
+  animation: insp-slide 200ms var(--ease);
+  outline: none;
+}
+
+@keyframes insp-slide {
+  from {
+    transform: translateX(24px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* ── Mobile (≤768px): full-width sheet ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  .panel {
+    width: 100% !important;
+  }
+}
