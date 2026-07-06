@@ -784,26 +784,46 @@
   color: var(--ink-2);
 }
 
-/* Opt-out banner — a single quiet hairline notice in place of the DraftCard.
-   No re-enable button: the compliance boundary is the product. */
-.optOutBanner {
-  flex: none;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  padding: 14px 20px;
-}
-
-.optOutText {
-  display: block;
-  max-width: 640px;
-  font-size: 13px;
+/* Gate notice (r16) — a slim line ABOVE the composer on an opted-out thread.
+   The composer STAYS (render-don't-hide): sends are refused at the gate, not by
+   hiding controls. Carries a quiet inline "Correct the record…" link. */
+.gateNotice {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 8px 4px 10px;
+  font-size: 12.5px;
   line-height: 1.5;
   color: var(--ink-2);
 }
 
-.optOutLead {
+.gateNoticeText {
+  min-width: 0;
+}
+
+.gateNoticeLead {
   font-weight: 600;
   color: var(--ink);
+}
+
+.gateNoticeLink {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  transition: text-decoration-color var(--dur) var(--ease);
+}
+
+.gateNoticeLink:hover {
+  text-decoration-color: var(--accent);
 }
 
 /* ── Agent ON/OFF switch (thread header) ────────────────────────────────────── */
@@ -1639,4 +1659,33 @@
 .qaCaption {
   font-size: 11px;
   color: var(--ink-2);
+}
+
+/* Corrected-record wisp (r16) — a quiet centered pill that fades in bottom-center
+   after a successful opt-out correction, then fades out. Motion-safe; the global
+   reset suppresses the transition under prefers-reduced-motion. */
+.correctedWisp {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translate(-50%, 8px);
+  z-index: 80;
+  padding: 9px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.correctedWispOn {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }

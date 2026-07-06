@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useClient } from '../../shell/ClientContext.tsx';
 import { useData } from '../../data/useData.ts';
 import type {
@@ -14,6 +14,7 @@ import {
   Avatar,
   GateReason,
   Button,
+  CorrectOptOutDialog,
   Table,
   THead,
   TBody,
@@ -37,6 +38,7 @@ function humanizeAction(action: string): string {
     'send.blocked': 'Send blocked',
     'send.allow': 'Send allowed',
     'outcome.recorded': 'Outcome recorded',
+    'optout.corrected': 'Opt-out record corrected',
     kill_switch: 'Kill switch',
   };
   if (map[action] !== undefined) return map[action];
@@ -67,17 +69,19 @@ function OptOutLedger({
   error,
   rows,
   onRetry,
+  onCorrect,
 }: {
   loading: boolean;
   error: boolean;
   rows: Contact[] | undefined;
   onRetry: () => void;
+  onCorrect: (contact: Contact) => void;
 }) {
   return (
     <Card title="Opt-out ledger" padded={false}>
       <p className={styles.cardIntro}>
         These people asked us to stop. They will never be texted again — the gate blocks every send
-        to them.
+        to them. Only a record made in error can be corrected, with a reason and a confirmation.
       </p>
       {loading ? (
         <div className={styles.pad}>
@@ -108,6 +112,7 @@ function OptOutLedger({
               <TH>Phone</TH>
               <TH>Line of business</TH>
               <TH>Status</TH>
+              <TH>{''}</TH>
             </TR>
           </THead>
           <TBody>
@@ -123,6 +128,13 @@ function OptOutLedger({
                 <TD>{c.lob ?? '—'}</TD>
                 <TD>
                   <StatusPill tone="block">Opted out</StatusPill>
+                </TD>
+                <TD>
+                  <span className={styles.rowAction}>
+                    <Button variant="ghost" size="sm" onClick={() => onCorrect(c)}>
+                      Correct record…
+                    </Button>
+                  </span>
                 </TD>
               </TR>
             ))}
@@ -408,6 +420,34 @@ export default function TrustScreen() {
   const audit = useData(() => client.auditSample(), [client]);
   const catalog = useData(() => client.connectionsCatalog(), [client]);
 
+  // ── Opt-out record correction (r16) ─────────────────────────────────────────
+  // A row's "Correct record…" opens the shared dialog. On confirm the record is
+  // cleared + full prior consent restored; we refetch the ledger (the row leaves)
+  // AND the audit trail (the 'optout.corrected' entry appears), then flash a wisp.
+  const [correcting, setCorrecting] = useState<Contact | null>(null);
+  const [correctedWisp, setCorrectedWisp] = useState(false);
+  const wispTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (wispTimer.current) clearTimeout(wispTimer.current);
+    },
+    [],
+  );
+  const onConfirmCorrect = useCallback(
+    async (contactId: string, reason: string): Promise<void> => {
+      const res = await client.correctOptOut(contactId, reason);
+      if (res.ok) {
+        setCorrecting(null);
+        setCorrectedWisp(true);
+        if (wispTimer.current) clearTimeout(wispTimer.current);
+        wispTimer.current = setTimeout(() => setCorrectedWisp(false), 2600);
+        optOuts.refetch();
+        audit.refetch();
+      }
+    },
+    [client, optOuts, audit],
+  );
+
   // Optimistic request: swap the row to its "Requested" state immediately, then
   // persist. A refetch confirms the state survives (and reloads honestly).
   const [pending, setPending] = useState<Set<string>>(new Set());
@@ -453,6 +493,7 @@ export default function TrustScreen() {
         error={optOuts.error !== undefined}
         rows={optOuts.data}
         onRetry={optOuts.refetch}
+        onCorrect={setCorrecting}
       />
 
       <AuditTrail
@@ -463,6 +504,23 @@ export default function TrustScreen() {
       />
 
       <DataCompliance />
+
+      {/* Correct an opt-out record (r16) — the shared centered dialog. */}
+      <CorrectOptOutDialog
+        open={correcting !== null}
+        contactId={correcting?.id ?? ''}
+        name={correcting?.display_name ?? ''}
+        onClose={() => setCorrecting(null)}
+        onConfirm={onConfirmCorrect}
+      />
+
+      {/* Quiet "corrected" wisp — announced politely, no focus steal. */}
+      <span
+        className={`${styles.correctedWisp} ${correctedWisp ? styles.correctedWispOn : ''}`}
+        aria-live="polite"
+      >
+        {correctedWisp ? 'Record corrected and logged.' : ''}
+      </span>
     </div>
   );
 }

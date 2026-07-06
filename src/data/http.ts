@@ -371,6 +371,16 @@ export class HttpClient implements DataClient {
     return this.req<Contact[]>('/api/opt-outs').catch(() => []);
   }
 
+  // Correct an opt-out record made in error (r16). The backend re-validates the
+  // reason and restores the contact's full prior consent. A missing/failing route
+  // degrades to { ok:false } (fail-closed — nothing changes) rather than throwing.
+  async correctOptOut(contactId: string, reason: string): Promise<{ ok: boolean }> {
+    return this.post<{ ok: boolean }>(
+      `/api/opt-outs/${encodeURIComponent(contactId)}/correct`,
+      { reason },
+    ).catch(() => ({ ok: false }));
+  }
+
   // Producer worklist — served empty rather than faked when the route is absent.
   async callList(): Promise<CallListRow[]> {
     return this.req<CallListRow[]>('/api/call-list').catch(() => []);

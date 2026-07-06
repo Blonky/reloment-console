@@ -23,6 +23,7 @@ import type {
   ThreadBrief,
 } from '../../data/types.ts';
 import Inspector from '../../shell/Inspector.tsx';
+import { CorrectOptOutDialog } from '../../components/index.ts';
 import TriagePane, { type TriageRowModel } from './TriagePane.tsx';
 import ThreadPane, { type TypingState } from './ThreadPane.tsx';
 import ContextRail from './ContextRail.tsx';
@@ -292,6 +293,34 @@ export default function InboxScreen() {
     [client, selectedId, refetchAll],
   );
 
+  // ── Opt-out record correction (r16) ─────────────────────────────────────────
+  // The thread-side "Correct the record…" link opens the SAME dialog the Settings
+  // ledger uses (shared component). On confirm we clear the record + restore full
+  // prior consent, refetch so the notice/pill leave and the suggestion may return,
+  // and flash a quiet wisp. correctingId being non-null holds the dialog open.
+  const [correctingOpen, setCorrectingOpen] = useState(false);
+  const [correctedWisp, setCorrectedWisp] = useState(false);
+  const wispTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (wispTimer.current) clearTimeout(wispTimer.current);
+    },
+    [],
+  );
+  const onConfirmCorrect = useCallback(
+    async (contactId: string, reason: string): Promise<void> => {
+      const res = await client.correctOptOut(contactId, reason);
+      if (res.ok) {
+        setCorrectingOpen(false);
+        setCorrectedWisp(true);
+        if (wispTimer.current) clearTimeout(wispTimer.current);
+        wispTimer.current = setTimeout(() => setCorrectedWisp(false), 2600);
+        refetchAll();
+      }
+    },
+    [client, refetchAll],
+  );
+
   // Flip the per-conversation Agent ON/OFF switch. Optimistic in the toggle;
   // the store confirms via agent.toggled and refetchAll reconciles state.
   const onToggleAgent = useCallback(
@@ -362,6 +391,7 @@ export default function InboxScreen() {
         onSend={onSend}
         onSendLink={onSendLink}
         onToggleAgent={onToggleAgent}
+        onCorrectRecord={() => setCorrectingOpen(true)}
         onOpenContext={() => setContextSheetOpen(true)}
         onBack={onBack}
       />
@@ -403,6 +433,26 @@ export default function InboxScreen() {
       >
         {selectedId !== null && <ConversationBrief conversationId={selectedId} />}
       </Inspector>
+
+      {/* Correct an opt-out record (r16) — the shared dialog, opened from the
+          gated composer's notice link. Only mounts with an opted-out detail. */}
+      {detail !== undefined && detail.optedOut && (
+        <CorrectOptOutDialog
+          open={correctingOpen}
+          contactId={detail.conversation.contact_id}
+          name={detail.conversation.display_name}
+          onClose={() => setCorrectingOpen(false)}
+          onConfirm={onConfirmCorrect}
+        />
+      )}
+
+      {/* Quiet "corrected" wisp — announced politely, no focus steal. */}
+      <span
+        className={`${styles.correctedWisp} ${correctedWisp ? styles.correctedWispOn : ''}`}
+        aria-live="polite"
+      >
+        {correctedWisp ? 'Record corrected and logged.' : ''}
+      </span>
     </div>
   );
 }

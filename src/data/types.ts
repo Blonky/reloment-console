@@ -49,6 +49,11 @@ export type MessageStatus =
   | 'held'
   | 'opted_out'
   | 'opted_back_in'
+  // The business corrected an opt-out record made in error (r16). Unlike a
+  // customer START (transactional-only), a correction says the opt-out never
+  // validly happened — full prior consent is restored. Rendered as a calm
+  // centered timeline entry, not a bubble.
+  | 'optout_corrected'
   | 'missed_call'
   | string; // blocked_<reason> is dynamic — keep the door open
 

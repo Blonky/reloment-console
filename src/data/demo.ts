@@ -243,6 +243,13 @@ export class DemoClient implements DataClient {
   private consents = new Map<string, Set<string>>(
     CONTACTS.map((c) => [c.id, new Set(c.consents)]),
   );
+  // Snapshot of a contact's consent scopes taken at opt-out time, so a later
+  // record correction (r16) can restore the FULL prior scopes — including
+  // marketing — because a correction says the opt-out never validly happened.
+  // Seeded for the fixture-opted-out contacts from their fixture consents.
+  private priorConsents = new Map<string, Set<string>>(
+    CONTACTS.filter((c) => c.optedOut).map((c) => [c.id, new Set(c.consents)]),
+  );
   // Messages-first thread (v4): the per-conversation Agent ON/OFF switch, seeded
   // from the fixtures' controller (all fixture threads are agent-controlled →
   // enabled). Absent from the map means "not yet toggled" — default enabled.
@@ -546,6 +553,9 @@ export class DemoClient implements DataClient {
         // Only the FIRST opt-out records a system entry + consent event; a
         // repeated STOP records the inbound bubble only (the bug being fixed).
         if (!wasOptedOut) {
+          // Snapshot the scopes we're revoking so a later record correction can
+          // restore the FULL prior consent (a correction says it never happened).
+          this.priorConsents.set(t.contactId, new Set(this.consentScopes(t.contactId)));
           this.optedOut.add(t.contactId);
           this.appendSystem(t, 'opted_out', 'Opted out — customer texted STOP');
           this.appendAudit('system', 'opt_out_recorded', text);
@@ -633,7 +643,7 @@ export class DemoClient implements DataClient {
   // event, not a chat bubble (see inboxUtils.isSystemEvent).
   private appendSystem(
     t: FixtureThread,
-    status: 'opted_out' | 'opted_back_in',
+    status: 'opted_out' | 'opted_back_in' | 'optout_corrected',
     body: string,
   ): FixtureMessage {
     const m: FixtureMessage = {
@@ -681,6 +691,42 @@ export class DemoClient implements DataClient {
     const scopes = this.consentScopes(contactId);
     scopes.add('transactional');
     scopes.delete('marketing');
+  }
+
+  // Correct an opt-out record made in error (r16). This is NOT a per-contact gate
+  // off-switch — a real customer STOP must stand; it is the business fixing a
+  // wrong record (a wrong number, an internal test, a mistaken entry) with a
+  // reason + audit. It clears optedOut and restores the FULL prior consent scopes
+  // (incl. marketing — a correction says the opt-out never validly happened,
+  // unlike a customer START which restores transactional only). Writes one
+  // 'optout_corrected' timeline entry + a consent.changed + suggestion.updated,
+  // and audits action 'optout.corrected' with the reason. A blank reason is
+  // refused (fail-closed: a correction always carries a written justification).
+  async correctOptOut(contactId: string, reason: string): Promise<{ ok: boolean }> {
+    const trimmed = reason.trim();
+    if (trimmed.length === 0) return delay({ ok: false });
+    // No-op if the contact isn't actually opted out (nothing to correct).
+    if (!this.optedOut.has(contactId)) return delay({ ok: false });
+
+    this.optedOut.delete(contactId);
+    // Restore the FULL prior scopes (marketing included). Fall back to the
+    // fixture consents if we have no snapshot (a seeded opt-out we never STOPped).
+    const prior = this.priorConsents.get(contactId) ?? new Set(contactById(contactId)?.consents ?? []);
+    this.consents.set(contactId, new Set(prior));
+    this.priorConsents.delete(contactId);
+
+    // Record the correction on the contact's thread (if one exists) as a calm
+    // centered timeline entry, and audit it.
+    const t = [...this.threads.values()].find((thr) => thr.contactId === contactId);
+    if (t) {
+      this.appendSystem(t, 'optout_corrected', 'Opt-out record corrected by Hartley Insurance');
+    }
+    this.appendAudit('owner', 'optout.corrected', trimmed);
+
+    const conversationId = t?.conversationId ?? `cv_${contactId}`;
+    this.emit({ type: 'consent.changed', conversationId, contactId, optedOut: false });
+    this.emit({ type: 'suggestion.updated', conversationId });
+    return delay({ ok: true });
   }
 
   // Whether the agent is ON for a conversation. Default enabled (fixtures are
@@ -784,6 +830,13 @@ export class DemoClient implements DataClient {
     const decision = this.gate(t.contactId, 'transactional');
     this.appendAudit('send_gate', 'send_gate', decision.auditReason);
     if (decision.decision !== 'ALLOW') {
+      // Render-don't-hide (r16): the gate REFUSED the send — surface it honestly
+      // in the thread as a centered GateReason row (no bubble, nothing was sent)
+      // rather than silently swallowing it. The composer keeps the typed text.
+      const refusal = this.appendBlocked(t, decision.auditReason);
+      this.emit({ type: 'message.sent', conversationId, message: this.toThreadMessage(refusal) });
+      // Keep state coherent so the suggestion slot re-resolves (null when opted out).
+      this.emit({ type: 'suggestion.updated', conversationId });
       return delay({ ok: false, blockedReason: decision.auditReason });
     }
     const channel = pickChannel(t.contactId);
@@ -911,6 +964,25 @@ export class DemoClient implements DataClient {
   // text-back, manual sends, and document requests.
   private appendSent(t: FixtureThread, body: string, channel: Exclude<Channel, null>): FixtureMessage {
     return this.appendSentWithParts(t, body, channel);
+  }
+
+  // Append a gate-refusal as a centered `blocked_<reason>` timeline entry (r16) —
+  // a visible refusal for a send the gate would not permit (e.g. a manual send to
+  // an opted-out contact). No bubble, nothing delivered; SystemEntry renders it as
+  // the GateReason row style (isSystemEvent matches `blocked_` prefixes).
+  private appendBlocked(t: FixtureThread, auditReason: string): FixtureMessage {
+    const m: FixtureMessage = {
+      id: `msg_blk_${t.messages.length + 1}_${t.conversationId}`,
+      direction: 'outbound',
+      body: '',
+      status: `blocked_${auditReason}`,
+      channel_accepted: null,
+      advice_verdict: 'none',
+      classification: 'transactional',
+      created_at: this.stamp(),
+    };
+    t.messages.push(m);
+    return m;
   }
 
   // Append a delivered outbound, optionally carrying rich parts (e.g. a LinkPart

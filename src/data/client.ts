@@ -131,6 +131,14 @@ export interface DataClient {
   agents(): Promise<LineAgent[]>;
   auditSample(): Promise<AuditRow[]>;
   optOuts(): Promise<Contact[]>;
+  // Correct an opt-out record made in error (r16) — a wrong number, an internal
+  // test, a mistaken entry. NOT a per-contact gate off-switch: a real customer
+  // STOP must stand. Requires a non-empty reason (audited). Clears optedOut and
+  // restores the contact's FULL prior consent scopes (incl. marketing — a
+  // correction says the opt-out never validly happened, unlike START which
+  // restores transactional only), writes an 'optout_corrected' timeline entry,
+  // and audits action 'optout.corrected' with the reason.
+  correctOptOut(contactId: string, reason: string): Promise<{ ok: boolean }>;
 
   // Producer worklist + tuning / scheduling read-models (round 7).
   callList(): Promise<CallListRow[]>;

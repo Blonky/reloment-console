@@ -307,6 +307,34 @@ store, so `thread()` / `queue()` reads stay the single source of truth.
   re-grant marketing express consent) — writing one `opted_back_in` entry and a
   `consent.changed`. `message.sent` fires on approve so an open thread updates
   live.
+- **Opt-out record correction** (r16 — the business corrects RECORDS, never the
+  gate): the gate has **no per-contact off switch**; a real customer STOP must
+  stand. But a record made in **error** (a wrong number, an internal test, a
+  mistaken entry) is correctable by the business through
+  `correctOptOut(contactId, reason)` with **friction + audit**: a required
+  **reason** and a required **confirmation** ("I confirm {name} did not ask us to
+  stop"). A correction says the opt-out **never validly happened**, so — unlike a
+  customer START — it restores the contact's **FULL prior consent scopes,
+  marketing included**. It clears `optedOut`, writes ONE `optout_corrected`
+  timeline entry ("Opt-out record corrected …"), emits `consent.changed` +
+  `suggestion.updated`, and audits action `optout.corrected` with the reason (the
+  same audit store the Settings ledger + Insights read). The record then leaves
+  the opt-out ledger. Correcting an errored record does not weaken the lifecycle:
+  a later real STOP opts the contact back out cleanly (still exactly ONE
+  `opted_out` entry). The correction dialog is a shared centered modal, opened
+  from BOTH the Settings opt-out ledger (a per-row "Correct record…" ghost) and
+  the gated composer's "Correct the record…" link.
+- **Render, don't hide** (r16 — the gate is the law, the operator keeps control):
+  the UI never HIDES a control to enforce compliance — it renders the control and
+  lets the **send gate visibly refuse**. On an opted-out thread the composer
+  **stays** (typeable), a slim notice ("{First} opted out. The gate blocks sends
+  to them.") sits above it, and each send attempt runs `sendManual` and surfaces
+  the honest **GateReason row** in the thread (no bubble — nothing was sent; the
+  composer keeps the typed text). The Agent ON/OFF toggle stays usable; the
+  suggestion slot stays silent (`suggestion()` → null for opted-out, since the
+  agent won't propose texting them). Home command intents that could address a
+  contact are reads/navigation only (no send path), and the enroll flow already
+  narrates exclusions — so no command-channel send is ever a silent no-op.
 - **Conversation brief** (`conversationBrief` / `askThread`): a brief is a 2–3
   sentence recap composed deterministically from real thread state (contact +
   product line, last inbound, current gate/consent state, what the agent did),

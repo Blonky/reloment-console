@@ -331,3 +331,39 @@
   color: var(--ink-2);
   line-height: 1.5;
 }
+
+/* ── opt-out record correction (r16) ─────────────────────────────── */
+/* The quiet "Correct record…" action sits right-aligned in its cell. */
+.rowAction {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Corrected-record wisp — a quiet centered pill, fades in bottom-center after a
+   successful correction. Motion-safe; global reset suppresses it under
+   prefers-reduced-motion. */
+.correctedWisp {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translate(-50%, 8px);
+  z-index: 80;
+  padding: 9px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.correctedWispOn {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

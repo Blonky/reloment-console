@@ -314,7 +314,36 @@ const jordanThread: FixtureThread = {
   ],
 };
 
-export const THREADS: FixtureThread[] = [danaThread, marcusThread, priyaThread, jordanThread];
+// Sam — a lapsed quote who texted STOP; the seeded opted-out thread (r16). Its
+// ONE opted_out system entry is the record the gate now enforces; the composer
+// stays but every send is refused, and the record can be corrected if it was
+// made in error. (Sam's contact fixture carries optedOut:true, so the demo gate
+// blocks sends here from the first render.)
+const samThread: FixtureThread = {
+  conversationId: 'cv_sam',
+  contactId: 'ct_sam',
+  messages: [
+    msg(
+      'outbound',
+      'Hi Sam, it’s Hartley Insurance. Your auto quote lapsed a while back. Want Tom to take another look at your rate?',
+      -4300,
+      { channel: 'sms' },
+    ),
+    msg('inbound', 'STOP', -4290),
+    msg('outbound', 'Opted out — customer texted STOP', -4289, {
+      status: 'opted_out',
+      channel: null,
+    }),
+  ],
+};
+
+export const THREADS: FixtureThread[] = [
+  danaThread,
+  marcusThread,
+  priyaThread,
+  jordanThread,
+  samThread,
+];
 
 export const threadByConversationId = (id: string): FixtureThread | undefined =>
   THREADS.find((t) => t.conversationId === id);

@@ -33,3 +33,6 @@ export type { TRProps, THProps, TDProps } from './Table.tsx';
 
 export { default as Switch } from './Switch.tsx';
 export type { SwitchProps } from './Switch.tsx';
+
+export { default as CorrectOptOutDialog } from './CorrectOptOutDialog.tsx';
+export type { CorrectOptOutDialogProps } from './CorrectOptOutDialog.tsx';

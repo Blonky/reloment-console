@@ -49,6 +49,9 @@ export interface ThreadPaneProps {
   onSendLink: (kind: LinkKind, docType?: string) => Promise<boolean>;
   // Flip the per-conversation Agent ON/OFF switch.
   onToggleAgent: (enabled: boolean) => Promise<void>;
+  // Open the "Correct an opt-out record" dialog for this contact (r16). Shown on
+  // an opted-out thread's notice line; the business corrects a RECORD in error.
+  onCorrectRecord: () => void;
   // Opens the context sheet — the button is CSS-hidden above 1100px, where the
   // rail is docked in the grid instead.
   onOpenContext: () => void;
@@ -258,6 +261,7 @@ export default function ThreadPane({
   onSend,
   onSendLink,
   onToggleAgent,
+  onCorrectRecord,
   onOpenContext,
   onBack,
 }: ThreadPaneProps) {
@@ -337,19 +341,19 @@ export default function ThreadPane({
             Live
           </span>
         )}
-        {/* Opted-out is real state → keep its pill; otherwise the Agent switch is
-            the only header status (no "Agent handling" / "You have this thread"). */}
-        {detail.optedOut ? (
+        {/* Opted-out is real state → keep its pill. The Agent switch stays usable
+            regardless (render-don't-hide, r16): opted out disables sends at the
+            gate, not the operator's controls. Both show when opted out. */}
+        {detail.optedOut && (
           <span className={styles.threadHeadPill}>
             <StatusPill tone="block">Opted out</StatusPill>
           </span>
-        ) : (
-          <AgentToggle
-            key={conversation.id}
-            enabled={conversation.agent_enabled}
-            onToggle={onToggleAgent}
-          />
         )}
+        <AgentToggle
+          key={conversation.id}
+          enabled={conversation.agent_enabled}
+          onToggle={onToggleAgent}
+        />
         <button
           type="button"
           className={styles.contextToggle}
@@ -389,31 +393,35 @@ export default function ThreadPane({
         )}
       </div>
 
-      {/* Bottom anchor: opted out → the quiet compliance banner INSTEAD of the
-          composer; otherwise the suggestion slot (above) + the composer. */}
-      {detail.optedOut ? (
-        <div className={styles.optOutBanner}>
-          <span className={styles.optOutText}>
-            <span className={styles.optOutLead}>{firstName} opted out.</span> Only they can opt
-            back in — texting START restores transactional messages; marketing consent must be
-            re-collected.
-          </span>
-        </div>
-      ) : (
-        <div className={styles.composerDock}>
-          <SuggestionSlot
-            suggestion={suggestion}
-            onApprove={onApprove}
-            onUse={(body) => composerRef.current?.loadDraft(body)}
-          />
-          <Composer
-            ref={composerRef}
-            firstName={firstName}
-            onSend={onSend}
-            onSendLink={onSendLink}
-          />
-        </div>
-      )}
+      {/* Bottom anchor (render-don't-hide, r16): the composer ALWAYS stays. When
+          opted out, a slim notice sits above it and the send gate visibly refuses
+          each attempt (a GateReason row in the thread) instead of hiding controls.
+          The suggestion slot stays hidden when opted out (suggestion() → null so
+          the agent won't propose texting them). */}
+      <div className={styles.composerDock}>
+        {detail.optedOut && (
+          <div className={styles.gateNotice}>
+            <span className={styles.gateNoticeText}>
+              <span className={styles.gateNoticeLead}>{firstName} opted out.</span> The gate blocks
+              sends to them.
+            </span>
+            <button type="button" className={styles.gateNoticeLink} onClick={onCorrectRecord}>
+              Correct the record…
+            </button>
+          </div>
+        )}
+        <SuggestionSlot
+          suggestion={suggestion}
+          onApprove={onApprove}
+          onUse={(body) => composerRef.current?.loadDraft(body)}
+        />
+        <Composer
+          ref={composerRef}
+          firstName={firstName}
+          onSend={onSend}
+          onSendLink={onSendLink}
+        />
+      </div>
     </section>
   );
 }
