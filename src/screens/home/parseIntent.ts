@@ -19,6 +19,8 @@ export type Intent =
   | { kind: 'search'; query: string } // client.searchConversations(query)
   | { kind: 'call_list' } // client.callList() — the producer worklist
   | { kind: 'missed_call' } // client.simulateMissedCall() — text-back demo
+  | { kind: 'research'; name: string } // client.researchContact(name) — enrichment waterfall
+  | { kind: 'navigate'; query: string } // client.resolveNavigate(query) — "take me to…"
   | { kind: 'pause' } // kill switch → on (typed confirm)
   | { kind: 'resume' } // kill switch → off (typed confirm)
   | { kind: 'help' }; // honest capabilities card
@@ -134,6 +136,27 @@ const BRIEF_PATTERNS: RegExp[] = [
   /^background on (.+)$/,
 ];
 
+// "research Ray" / "enrich Dana Whitfield" / "look up Marcus" / "run enrichment on x"
+// The enrichment waterfall over a named contact (first-party-only).
+const RESEARCH_PATTERNS: RegExp[] = [
+  /^research (?:on |contact )?(.+)$/,
+  /^enrich (?:contact )?(.+)$/,
+  /^(?:run|do) (?:an? )?(?:enrichment|research|waterfall) (?:on|for) (.+)$/,
+  /^look up (.+)$/,
+  /^dig up (?:everything |what we have )?(?:on|about) (.+)$/,
+  /^what do we (?:know|have) (?:on|about) (.+)$/,
+];
+
+// "take me to Dana" / "open inbox" / "go to settings" / "show me the agent flows"
+// Resolved by resolveNavigate — section words win over a stray name match.
+const NAVIGATE_PATTERNS: RegExp[] = [
+  /^take me to (?:the )?(.+)$/,
+  /^(?:go|jump|navigate) to (?:the )?(.+)$/,
+  /^open (?:the )?(.+)$/,
+  /^show me (?:the )?(.+)$/,
+  /^bring me to (?:the )?(.+)$/,
+];
+
 // "search x" / "find conversations about x" / "look for x"
 const SEARCH_PATTERNS: RegExp[] = [
   /^search (?:for )?(.+)$/,
@@ -167,6 +190,16 @@ function firstCapture(text: string, patterns: RegExp[]): string | null {
   return null;
 }
 
+// A navigate target that is really a bare book-read command — "show renewals",
+// "open campaign status" — should stay its own read, not a page navigation.
+// Section words (inbox, agent, flows, insights, settings, contacts, book) are
+// deliberately NOT here so "open inbox" / "show me the flows" still navigate.
+function isBookReadNoun(target: string): boolean {
+  return /^(the )?(renewals?|laps(ed|ing)|campaign(s)?( status)?|win[- ]?back|call list)\b/.test(
+    target.trim(),
+  );
+}
+
 export function parseIntent(input: string): Intent {
   const text = normalize(input);
   if (text.length === 0) return { kind: 'help' };
@@ -189,10 +222,26 @@ export function parseIntent(input: string): Intent {
 
   if (any(text, CAMPAIGN_STATUS_PATTERNS)) return { kind: 'campaign_status' };
 
-  // Brief/search carry an argument — test them before the bare noun reads so a
+  // Brief/research carry an argument — test them before the bare noun reads so a
   // "brief me on dana" line isn't swallowed by a stray "renewal" token.
   const briefName = firstCapture(text, BRIEF_PATTERNS);
   if (briefName) return { kind: 'brief', name: briefName };
+
+  // Research/enrichment ("research Ray", "enrich Dana", "look up Marcus") — a
+  // named contact waterfall. Before search so "look up X" runs enrichment, not
+  // a text search; the UI honestly reports an unknown name.
+  const researchName = firstCapture(text, RESEARCH_PATTERNS);
+  if (researchName) return { kind: 'research', name: researchName };
+
+  // Navigation ("take me to Dana", "open inbox", "show me the agent flows"). A
+  // navigate verb wins UNLESS its target is a bare book-read noun — "show
+  // renewals" / "open campaign status" stay their own read commands. The client
+  // resolves the target (section word or contact); an unresolved one falls to
+  // the honest "nowhere to open" reply.
+  const navTarget = firstCapture(text, NAVIGATE_PATTERNS);
+  if (navTarget && !isBookReadNoun(navTarget)) {
+    return { kind: 'navigate', query: navTarget };
+  }
 
   const searchQuery = firstCapture(text, SEARCH_PATTERNS);
   if (searchQuery) return { kind: 'search', query: searchQuery };
@@ -242,6 +291,16 @@ export const COMMAND_CATALOGUE: CommandDoc[] = [
     label: 'Brief me on Dana',
     example: 'Brief me on Dana',
     blurb: 'A one-card brief on any contact, with consent + memory.',
+  },
+  {
+    label: 'Research a contact',
+    example: 'Research Dana',
+    blurb: 'Run the first-party enrichment waterfall — book, conversations, and what needs the platform.',
+  },
+  {
+    label: 'Take me to the Inbox',
+    example: 'Take me to the Inbox',
+    blurb: 'Jump to any screen or contact — “open inbox”, “take me to Dana”, “go to settings”.',
   },
   {
     label: 'Search a topic',

@@ -29,6 +29,8 @@ import type {
   CallListRow,
   CampaignRow,
   EnrollResult,
+  ResearchReport,
+  ResearchStep,
   SearchHit,
   ThreadBrief,
 } from '../../data/types.ts';
@@ -41,6 +43,8 @@ import {
   IconSearch,
   IconPhone,
   IconMissedCall,
+  IconNavigate,
+  IconCheck,
 } from './icons.tsx';
 import { COMMAND_CATALOGUE } from './parseIntent.ts';
 import ArtifactCard from './ArtifactCard.tsx';
@@ -686,6 +690,168 @@ export function MissedCallReply({
           <Link to={href}>Open the conversation →</Link>
         </p>
       </ArtifactCard>
+    </ReplyShell>
+  );
+}
+
+// ── Research / enrichment waterfall (r11) ─────────────────────────────────────
+// One narration line + a WaterfallCard: the four steps as stacked rows (book,
+// conversations, carrier, web). A hit shows a quiet check + its facts; a miss
+// shows an em-dash "nothing new"; a needs_platform step shows a muted "runs on
+// the platform connection" pill. The consentNote is the card's quiet footer.
+// Unknown contact → an honest "not in the book" reply (no card).
+const STEP_META: Record<
+  ResearchStep['source'],
+  { hitLabel: string; missLabel: string }
+> = {
+  book: { hitLabel: 'Book of record', missLabel: 'Book of record' },
+  conversations: { hitLabel: 'Your conversations', missLabel: 'Your conversations' },
+  carrier: { hitLabel: 'Carrier lookup', missLabel: 'Carrier lookup' },
+  web: { hitLabel: 'Web research', missLabel: 'Web research' },
+};
+
+function WaterfallRow({ step }: { step: ResearchStep }) {
+  const hitCount = step.status === 'hit' ? step.facts.length : 0;
+  return (
+    <div className={styles.wfRow}>
+      <span
+        className={`${styles.wfDot} ${
+          step.status === 'hit'
+            ? styles.wfDotHit
+            : step.status === 'miss'
+              ? styles.wfDotMiss
+              : styles.wfDotPlatform
+        }`}
+        aria-hidden="true"
+      >
+        {step.status === 'hit' ? <IconCheck size={12} /> : null}
+      </span>
+      <div className={styles.wfMain}>
+        <div className={styles.wfHead}>
+          <span className={styles.wfLabel}>
+            {step.status === 'needs_platform' || step.status === 'miss'
+              ? step.label
+              : STEP_META[step.source].hitLabel}
+          </span>
+          {step.status === 'hit' && (
+            <span className={styles.wfCount}>
+              {hitCount} {hitCount === 1 ? 'fact' : 'facts'}
+            </span>
+          )}
+          {step.status === 'needs_platform' && (
+            <span className={styles.wfPlatformPill}>runs on the platform connection</span>
+          )}
+        </div>
+        {step.status === 'hit' && (
+          <ul className={styles.wfFacts}>
+            {step.facts.map((f, i) => (
+              <li className={styles.wfFact} key={i}>
+                {f}
+              </li>
+            ))}
+          </ul>
+        )}
+        {step.status === 'miss' && (
+          <span className={styles.wfMiss}>— nothing new</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function WaterfallCard({
+  report,
+  meta,
+}: {
+  report: ResearchReport;
+  meta: ReplyMeta;
+}) {
+  const first = report.name.split(' ')[0];
+  const hits = report.steps.filter((s) => s.status === 'hit').length;
+  const total = report.steps.length;
+  const narration = `Ran the enrichment waterfall for ${first} — ${hits} of ${total} sources hit.`;
+
+  return (
+    <ReplyShell narration={narration} meta={meta}>
+      <div className={styles.waterfall}>
+        <div className={styles.wfList}>
+          {report.steps.map((s) => (
+            <WaterfallRow step={s} key={s.source} />
+          ))}
+        </div>
+        <p className={styles.wfConsent}>{report.consentNote}</p>
+      </div>
+    </ReplyShell>
+  );
+}
+
+// Unknown-contact reply — honest, no card.
+export function ResearchMissReply({
+  name,
+  meta,
+}: {
+  name: string;
+  meta: ReplyMeta;
+}) {
+  return (
+    <ReplyShell
+      narration={`I don’t have anyone by “${name}” in the book.`}
+      meta={meta}
+    >
+      <p className={styles.narrationFollow}>
+        Try a name from your <Link to="/contacts">Contacts</Link>, or run a{' '}
+        search instead.
+      </p>
+    </ReplyShell>
+  );
+}
+
+// ── Navigation (r11) — "take me to…" ──────────────────────────────────────────
+// A control reply: one narration line + the artifact-style destination link
+// (so the transcript history keeps the destination), then the UI auto-navigates
+// after a short beat (instant under reduced motion). No gate disclosure — a
+// navigation is a pure UI move, not a send — so this reply is bespoke.
+export function NavigateCard({
+  label,
+  href,
+}: {
+  label: string;
+  href: string;
+}) {
+  return (
+    <div className={styles.reply}>
+      <p className={styles.narration}>Taking you to {label}.</p>
+      <Link to={href} className={styles.navArtifact}>
+        <span className={styles.navArtifactIcon}>
+          <IconNavigate />
+        </span>
+        <span className={styles.navArtifactMain}>
+          <span className={styles.navArtifactTitle}>{label}</span>
+          <span className={styles.navArtifactHref}>{href}</span>
+        </span>
+        <span className={styles.navArtifactAction}>Open →</span>
+      </Link>
+    </div>
+  );
+}
+
+// No-match reply — honest about what it can open.
+export function NavigateMissReply({
+  query,
+  meta,
+}: {
+  query: string;
+  meta: ReplyMeta;
+}) {
+  return (
+    <ReplyShell
+      narration={`I couldn’t find anywhere to open for “${query}”.`}
+      meta={meta}
+    >
+      <p className={styles.narrationFollow}>
+        I can open the Inbox, Contacts, Agent, Insights, or Trust &amp; Settings —
+        or any contact by name.
+      </p>
     </ReplyShell>
   );
 }

@@ -4,7 +4,9 @@
 
 import type {
   AgentAsk,
+  AgentChatMessage,
   AgentProfile,
+  AgentSession,
   ApproveResult,
   AuditRow,
   BookRow,
@@ -22,6 +24,7 @@ import type {
   OutcomeRow,
   PlaybookFlow,
   QueueItem,
+  ResearchReport,
   SearchHit,
   SteerGoal,
   Suggestion,
@@ -133,6 +136,33 @@ export interface DataClient {
   // connects, each with status + what it powers + the detail it provides.
   // Composed from existing fixtures so the grid reads in one call.
   connections(): Promise<ConnectionRow[]>;
+
+  // ── Agent workspace (r11) — Home as a real agent chat with sessions ─────────
+  // The Home command channel becomes a Manus/Sauna-style workspace: named chat
+  // SESSIONS with history + delete, backed by localStorage in demo and the
+  // platform's /api/agent/sessions CRUD in production. The session store only
+  // persists the TRANSCRIPT (role + body); the demo intent pipeline stays
+  // UI-side. Replayed sessions are a faithful LOG, not re-executed commands.
+  agentSessions(): Promise<AgentSession[]>; // newest-first (by updated_at)
+  createAgentSession(): Promise<AgentSession>; // a fresh 'New chat'
+  deleteAgentSession(id: string): Promise<void>;
+  agentSessionMessages(id: string): Promise<AgentChatMessage[]>; // oldest-first
+  // Append one transcript line. In demo, the first USER message auto-sets the
+  // title (truncated) while it is still 'New chat', and bumps updated_at.
+  appendAgentMessage(id: string, role: 'user' | 'assistant', body: string): Promise<void>;
+  renameAgentSession(id: string, title: string): Promise<void>;
+
+  // Research / waterfall enrichment (r11): a first-party-only waterfall over a
+  // contact (book → conversations → carrier → web). Demo mode NEVER fabricates
+  // web facts — the carrier + web steps report 'needs_platform'. Unknown name →
+  // null. The consentNote states the standing boundary (research ≠ texting).
+  researchContact(nameOrId: string): Promise<ResearchReport | null>;
+
+  // Navigation intent (r11): resolve a "take me to…" query to a console target.
+  // Deterministic — contact names route to their conversation, section words to
+  // their surface. Returns null when nothing matches. Both clients compute this
+  // locally (no server round-trip needed).
+  resolveNavigate(query: string): Promise<{ label: string; href: string } | null>;
 }
 
 // Wave-1 note: HttpClient implements the full DataClient (routes exist for the

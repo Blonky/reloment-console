@@ -129,6 +129,19 @@ const IconCall = (
     <path d="M13.5 11.2v1.8a1.2 1.2 0 0 1-1.3 1.2 11.8 11.8 0 0 1-5.2-1.8 11.6 11.6 0 0 1-3.6-3.6A11.8 11.8 0 0 1 1.6 3.6 1.2 1.2 0 0 1 2.8 2.3h1.8a1.2 1.2 0 0 1 1.2 1c.08.6.22 1.15.42 1.7a1.2 1.2 0 0 1-.27 1.27l-.76.76a9.6 9.6 0 0 0 3.6 3.6l.76-.76a1.2 1.2 0 0 1 1.27-.27c.55.2 1.1.34 1.7.42a1.2 1.2 0 0 1 1 1.2z" />
   </Svg>
 );
+const IconResearch = (
+  <Svg>
+    <circle cx="6.5" cy="6.5" r="4" />
+    <path d="M13.5 13.5 10 10" />
+    <path d="M6.5 4.5v4M4.5 6.5h4" />
+  </Svg>
+);
+const IconNavigate = (
+  <Svg>
+    <path d="M4.5 11.5 11.5 4.5" />
+    <path d="M6 4.5h5.5V10" />
+  </Svg>
+);
 
 // ── Item model ────────────────────────────────────────────────────────────────
 type PaletteItem = {
@@ -155,6 +168,8 @@ const ITEMS: PaletteItem[] = [
   { id: 'cmd-campaign', kind: 'command', phrase: 'Campaign status', label: 'Campaign status', group: 'Commands', icon: IconCampaignStatus, keywords: 'campaigns progress enrolled excluded sent replied' },
   { id: 'cmd-calllist', kind: 'command', phrase: 'Who should we call today', label: 'Who should we call today', group: 'Commands', icon: IconCall, keywords: 'call list dial prioritize producer worklist leads signals who to call' },
   { id: 'cmd-brief', kind: 'command', phrase: 'Brief me on Dana', label: 'Brief me on Dana', group: 'Commands', icon: IconBrief, keywords: 'brief contact story background dana memory consent' },
+  { id: 'cmd-research', kind: 'command', phrase: 'Research Dana', label: 'Research a contact', group: 'Commands', icon: IconResearch, keywords: 'research enrich enrichment waterfall lookup dig contact book carrier web dana' },
+  { id: 'cmd-navigate', kind: 'command', phrase: 'Take me to the Inbox', label: 'Take me to the Inbox', group: 'Commands', icon: IconNavigate, keywords: 'navigate take me to open go jump inbox contacts agent insights settings' },
   { id: 'cmd-pause', kind: 'command', phrase: 'Pause all sending', label: 'Pause all sending', group: 'Commands', icon: IconPause, keywords: 'kill switch stop halt freeze emergency pause everything' },
   { id: 'cmd-resume', kind: 'command', phrase: 'Resume sending', label: 'Resume sending', group: 'Commands', icon: IconResume, keywords: 'unpause resume start again re-enable clear' },
 ];

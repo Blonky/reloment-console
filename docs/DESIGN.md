@@ -485,6 +485,61 @@ Inbox context sheet converge on it.
   Composer has suggestion chips for the above. The transcript is the proof
   that command → governed tool → narrated exclusions works end to end.
 
+#### Agent workspace (r11)
+
+Home stops being a single ephemeral command channel and becomes a real **agent
+workspace** — Manus/Sauna-shaped: named chat **sessions** with history and
+delete, plus **research/enrichment** and **navigation** capabilities. All of it
+rides the DataClient seam: **localStorage in demo, the platform's
+`/api/agent/sessions` CRUD in production** (the platform is concurrently gaining
+real session storage + a language-model planner; the `HttpClient` methods map
+1:1 to those routes).
+
+- **Sessions** (`agentSessions()` newest-first, `createAgentSession()`,
+  `deleteAgentSession(id)`, `agentSessionMessages(id)`, `appendAgentMessage(id,
+  role, body)`, `renameAgentSession(id, title)`; types `AgentSession { id;
+  title; updated_at }`, `AgentChatMessage { id; role:'user'|'assistant'; body;
+  created_at }`). A left rail lists sessions (newest activity on top); the active
+  session owns the transcript. **Demo persistence**: the whole store lives under
+  one namespaced key **`reloment.demo.agentSessions.v1`**, ordered by the
+  session `stamp()` clock. The title auto-sets from the **first user message**
+  (truncated ~40 chars) while it is still `'New chat'`. **All localStorage access
+  is guarded in try/catch** — SSR / privacy mode / quota failures degrade to an
+  in-memory fallback that stays authoritative, so the workspace never throws.
+- **Transcript replay = a faithful log, NOT re-execution.** The demo intent
+  pipeline (Home's `parseIntent` → reply) stays **UI-side**; the session store
+  persists only the **transcript** — user messages **verbatim** and each
+  assistant reply as its **plain-text narration line** (not the rich artifact
+  card, not a re-runnable command). On reopening a session the transcript
+  **renders those stored texts** without re-running any actions: replayed
+  sessions are a **faithful record of what was said**, never a re-execution of
+  the commands. (Live turns still render rich artifact cards; only the replayed
+  history is text.)
+- **Research / waterfall enrichment** (`researchContact(nameOrId):
+  Promise<ResearchReport | null>`; `ResearchStep { source:'book' |
+  'conversations' | 'carrier' | 'web'; label; status:'hit' | 'miss' |
+  'needs_platform'; facts[] }`). A first-party-only waterfall over a contact,
+  resolved by fuzzy name (reusing the contact lookup): **book** → real policy /
+  LOB / x-date facts; **conversations** → the contact's memory atoms + the last
+  inbound quote; **carrier** → `status: 'needs_platform'`, label *"Carrier lookup
+  ships with the AMS connector"*; **web** → `status: 'needs_platform'`, label
+  *"Web research (Exa) runs on the platform connection"*. **Honesty rule: demo
+  mode NEVER fabricates web facts** — the two platform-only steps report
+  `needs_platform` with empty `facts`, never invented data. Unknown name →
+  `null`. `consentNote` states the standing boundary: *"Research informs calls
+  and prep for anyone — texting still requires consent; the gate enforces it."*
+  `HttpClient` maps `POST /api/agent/enrich` onto the platform's
+  `enrich_contact` response shape, degrading to `null` on failure.
+- **Navigation intent** (`resolveNavigate(query): Promise<{ label; href } |
+  null>`). Deterministic "take me to…" resolution used by the UI: contact names
+  → `/inbox?c=<their conversation>` (or `/contacts?c=<id>` when no conversation
+  exists); `inbox|approvals` → `/inbox`; `agent|flows|playbooks` → `/agent`;
+  `insights|revenue` → `/insights`; `settings|trust|connections` → `/trust`;
+  `contacts|book` → `/contacts`; no match → `null`. Section words win over a
+  stray name match. **Both clients compute this locally** — no server round-trip
+  is needed (the `HttpClient`, lacking a local thread map, routes contact-name
+  queries to `/contacts?q=<query>` instead of a specific conversation).
+
 ## 6. Secondary screens (structured skeletons)
 
 - **Contacts**: table (name, phone, LOB, policy status, renewal, consent

@@ -15,7 +15,9 @@
 import type { DataClient } from './client.ts';
 import type {
   AgentAsk,
+  AgentChatMessage,
   AgentProfile,
+  AgentSession,
   ApproveResult,
   AuditRow,
   BookRow,
@@ -38,6 +40,8 @@ import type {
   OutcomeRow,
   PlaybookFlow,
   QueueItem,
+  ResearchReport,
+  ResearchStep,
   SearchHit,
   SteerGoal,
   Suggestion,
@@ -88,6 +92,22 @@ const STOP_WORDS = new Set([
   'opt-out',
 ]);
 const START_WORDS = new Set(['start', 'unstop']);
+
+// ── Agent workspace (r11) persistence ───────────────────────────────────────
+// One namespaced localStorage key holds the whole session store (sessions +
+// their transcripts). Bumping the version suffix is how we'd migrate the shape.
+const AGENT_STORE_KEY = 'reloment.demo.agentSessions.v1';
+// A fresh session's placeholder title until the first user message renames it.
+const NEW_CHAT_TITLE = 'New chat';
+// How many characters a first-message-derived title is truncated to (~40).
+const TITLE_MAX = 40;
+
+// The persisted shape under AGENT_STORE_KEY: sessions keyed by id, each with its
+// own transcript. Kept flat + JSON-friendly so it round-trips through the key.
+interface AgentStore {
+  sessions: AgentSession[];
+  messages: Record<string, AgentChatMessage[]>;
+}
 
 // The single latency helper. One knob so the whole client feels consistent.
 const LATENCY_MS = 250;
@@ -2148,6 +2168,263 @@ export class DemoClient implements DataClient {
   private scopeList(scopes: Set<string>): string {
     const list = [...scopes];
     return list.length ? list.join(' + ') : 'none';
+  }
+
+  // ── Agent workspace (r11) — chat sessions with history + delete ─────────────
+  // Persisted to localStorage under AGENT_STORE_KEY. ALL localStorage access is
+  // guarded (SSR / privacy mode → the in-memory fallback below is authoritative).
+  // Ordering uses the session stamp() clock so newest-first is deterministic.
+  private memoryStore: AgentStore | null = null; // in-memory fallback / cache
+  private agentSeq = 0; // monotonic id counter (deterministic, no Math.random)
+  private agentSeqSeeded = false; // seeded once from persisted ids per instance
+
+  private nextAgentId(prefix: string): string {
+    this.agentSeq += 1;
+    return `${prefix}_${this.agentSeq}`;
+  }
+
+  // Seed the id counter past the highest numeric suffix already in the store, so
+  // ids minted in a fresh page load NEVER collide with sessions/messages that
+  // were persisted to localStorage in a previous load. Runs once per instance.
+  private seedAgentSeq(store: AgentStore): void {
+    if (this.agentSeqSeeded) return;
+    this.agentSeqSeeded = true;
+    let max = this.agentSeq;
+    const consider = (id: string) => {
+      const n = Number(id.slice(id.lastIndexOf('_') + 1));
+      if (Number.isFinite(n) && n > max) max = n;
+    };
+    for (const s of store.sessions) consider(s.id);
+    for (const list of Object.values(store.messages)) {
+      for (const m of list) consider(m.id);
+    }
+    this.agentSeq = max;
+  }
+
+  // Read the whole store. Prefers localStorage; falls back to the in-memory copy
+  // when storage is unavailable or the payload is malformed. Never throws.
+  private readAgentStore(): AgentStore {
+    if (this.memoryStore) return this.memoryStore;
+    const empty: AgentStore = { sessions: [], messages: {} };
+    try {
+      const raw = globalThis.localStorage?.getItem(AGENT_STORE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as AgentStore;
+        if (parsed && Array.isArray(parsed.sessions) && parsed.messages) {
+          this.memoryStore = parsed;
+          this.seedAgentSeq(parsed);
+          return parsed;
+        }
+      }
+    } catch {
+      // SSR / privacy mode / malformed — fall through to the in-memory store.
+    }
+    this.memoryStore = empty;
+    return empty;
+  }
+
+  // Persist the store. Updates the in-memory cache first (always authoritative),
+  // then best-effort writes to localStorage inside a try/catch.
+  private writeAgentStore(store: AgentStore): void {
+    this.memoryStore = store;
+    try {
+      globalThis.localStorage?.setItem(AGENT_STORE_KEY, JSON.stringify(store));
+    } catch {
+      // Quota / privacy mode — the in-memory cache still holds the truth.
+    }
+  }
+
+  agentSessions(): Promise<AgentSession[]> {
+    const { sessions } = this.readAgentStore();
+    const sorted = sessions
+      .slice()
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    return delay(sorted);
+  }
+
+  createAgentSession(): Promise<AgentSession> {
+    const store = this.readAgentStore();
+    const session: AgentSession = {
+      id: this.nextAgentId('sess'),
+      title: NEW_CHAT_TITLE,
+      updated_at: this.stamp(),
+    };
+    store.sessions.push(session);
+    store.messages[session.id] = [];
+    this.writeAgentStore(store);
+    return delay(session);
+  }
+
+  deleteAgentSession(id: string): Promise<void> {
+    const store = this.readAgentStore();
+    store.sessions = store.sessions.filter((s) => s.id !== id);
+    delete store.messages[id];
+    this.writeAgentStore(store);
+    return delay(undefined);
+  }
+
+  agentSessionMessages(id: string): Promise<AgentChatMessage[]> {
+    const { messages } = this.readAgentStore();
+    // Oldest-first (append order); a faithful transcript log.
+    return delay((messages[id] ?? []).slice());
+  }
+
+  // Append one transcript line. On the FIRST user message, if the session title
+  // is still the placeholder, derive a truncated title from that message. Every
+  // append bumps updated_at so the session floats to the top of the list.
+  appendAgentMessage(id: string, role: 'user' | 'assistant', body: string): Promise<void> {
+    const store = this.readAgentStore();
+    const session = store.sessions.find((s) => s.id === id);
+    if (!session) return delay(undefined); // deleted mid-flight — a quiet no-op
+    const list = store.messages[id] ?? (store.messages[id] = []);
+    const at = this.stamp();
+    list.push({ id: this.nextAgentId('acm'), role, body, created_at: at });
+    if (role === 'user' && session.title === NEW_CHAT_TITLE) {
+      session.title = this.deriveTitle(body);
+    }
+    session.updated_at = at;
+    this.writeAgentStore(store);
+    return delay(undefined);
+  }
+
+  renameAgentSession(id: string, title: string): Promise<void> {
+    const store = this.readAgentStore();
+    const session = store.sessions.find((s) => s.id === id);
+    if (session) {
+      const trimmed = title.trim();
+      session.title = trimmed || NEW_CHAT_TITLE;
+      session.updated_at = this.stamp();
+      this.writeAgentStore(store);
+    }
+    return delay(undefined);
+  }
+
+  // Truncate a first message to a session title (~40 chars, collapse whitespace).
+  private deriveTitle(body: string): string {
+    const one = body.replaceAll(/\s+/g, ' ').trim();
+    if (!one) return NEW_CHAT_TITLE;
+    return one.length > TITLE_MAX ? `${one.slice(0, TITLE_MAX - 1)}…` : one;
+  }
+
+  // ── Research / waterfall enrichment (r11) — demo-honest ─────────────────────
+  // Resolve the contact by id or fuzzy name, then run a first-party waterfall:
+  //   book          → real policy / LOB / renewal facts from the fixture
+  //   conversations → memory atoms + the last inbound quote from the thread
+  //   carrier       → needs_platform (ships with the AMS connector)
+  //   web           → needs_platform (Exa runs on the platform connection)
+  // Demo mode NEVER invents web facts — the honesty rule. Unknown name → null.
+  researchContact(nameOrId: string): Promise<ResearchReport | null> {
+    const c = this.resolveContact(nameOrId);
+    if (!c) return delay(null);
+
+    const steps: ResearchStep[] = [];
+
+    // book — real policy facts.
+    const bookFacts: string[] = [];
+    if (c.lob) bookFacts.push(`Lines of business: ${c.lob}`);
+    if (c.status) bookFacts.push(`Policy status: ${c.status.replaceAll('_', ' ')}`);
+    if (c.xDateDays !== null)
+      bookFacts.push(`Renews ${this.friendlyDate(c.xDateDays)} (${c.xDateDays} days)`);
+    steps.push({
+      source: 'book',
+      label: 'Book of record',
+      status: bookFacts.length ? 'hit' : 'miss',
+      facts: bookFacts,
+    });
+
+    // conversations — memory atoms + last inbound quote.
+    const convFacts: string[] = c.memory.map((m) => `${m.value} (${m.source})`);
+    const thread = threadByContactId(c.id) ??
+      [...this.threads.values()].find((t) => t.contactId === c.id);
+    const lastInbound = thread
+      ? [...thread.messages].reverse().find((m) => m.direction === 'inbound')
+      : undefined;
+    if (lastInbound) convFacts.push(`Last inbound: “${this.trim(lastInbound.body, 90)}”`);
+    steps.push({
+      source: 'conversations',
+      label: 'Your conversations',
+      status: convFacts.length ? 'hit' : 'miss',
+      facts: convFacts,
+    });
+
+    // carrier — needs the AMS connector (no invented facts).
+    steps.push({
+      source: 'carrier',
+      label: 'Carrier lookup ships with the AMS connector',
+      status: 'needs_platform',
+      facts: [],
+    });
+
+    // web — Exa runs on the platform connection (no invented facts).
+    steps.push({
+      source: 'web',
+      label: 'Web research (Exa) runs on the platform connection',
+      status: 'needs_platform',
+      facts: [],
+    });
+
+    return delay({
+      contactId: c.id,
+      name: c.name,
+      steps,
+      consentNote:
+        'Research informs calls and prep for anyone — texting still requires consent; the gate enforces it.',
+    });
+  }
+
+  // Resolve a contact by exact id, exact name, or a fuzzy (case-insensitive,
+  // substring / first-name) match. Deterministic — first fixture match wins.
+  private resolveContact(nameOrId: string): FixtureContact | undefined {
+    const q = nameOrId.trim().toLowerCase();
+    if (!q) return undefined;
+    const byId = contactById(nameOrId);
+    if (byId) return byId;
+    return (
+      CONTACTS.find((c) => c.name.toLowerCase() === q) ??
+      CONTACTS.find((c) => c.name.toLowerCase().includes(q)) ??
+      CONTACTS.find((c) => c.name.toLowerCase().split(' ').includes(q))
+    );
+  }
+
+  // ── Navigation intent (r11) — deterministic "take me to…" resolver ──────────
+  // A contact name routes to their conversation (/inbox?c=<conversationId>), or
+  // /contacts?c=<contactId> when no conversation exists. Section words route to
+  // their surface. Returns null when nothing matches. Computed locally.
+  resolveNavigate(query: string): Promise<{ label: string; href: string } | null> {
+    return delay(this.computeNavigate(query));
+  }
+
+  private computeNavigate(query: string): { label: string; href: string } | null {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+
+    // Section words first — an explicit surface intent beats a stray name match.
+    const sections: { match: string[]; label: string; href: string }[] = [
+      { match: ['inbox', 'approvals'], label: 'Inbox', href: '/inbox' },
+      { match: ['agent', 'flows', 'playbooks'], label: 'Agent', href: '/agent' },
+      { match: ['insights', 'revenue'], label: 'Insights', href: '/insights' },
+      { match: ['settings', 'trust', 'connections'], label: 'Trust & Settings', href: '/trust' },
+      { match: ['contacts', 'book'], label: 'Contacts', href: '/contacts' },
+    ];
+    const words = q.split(/\s+/);
+    for (const s of sections) {
+      if (s.match.some((m) => words.includes(m))) {
+        return { label: s.label, href: s.href };
+      }
+    }
+
+    // Contact name → their conversation (or the contacts book if none exists).
+    const c = this.resolveContact(query);
+    if (c) {
+      const conv =
+        [...this.threads.values()].find((t) => t.contactId === c.id) ??
+        threadByContactId(c.id);
+      return conv
+        ? { label: c.name, href: `/inbox?c=${encodeURIComponent(conv.conversationId)}` }
+        : { label: c.name, href: `/contacts?c=${encodeURIComponent(c.id)}` };
+    }
+
+    return null;
   }
 }
 

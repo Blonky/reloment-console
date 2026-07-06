@@ -71,6 +71,9 @@ export function disclosureFor(
     case 'brief':
     case 'search':
     case 'call_list':
+    // Research is a first-party read of the book + our own conversations — it
+    // attempts no sends (and the consent boundary is the card's own footer).
+    case 'research':
       return { kind: 'read_only' };
 
     // The kill switch is a control action — it toggles the gate, not a send.
@@ -80,6 +83,8 @@ export function disclosureFor(
     case 'pause':
     case 'resume':
     case 'missed_call':
+    // Navigation is a pure UI move — it opens a screen, attempts no send.
+    case 'navigate':
       return { kind: 'control' };
 
     case 'campaign_status':

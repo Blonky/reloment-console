@@ -123,6 +123,62 @@ export function IconMissedCall({ size = 16 }: IconProps) {
   ));
 }
 
+// Research / enrichment — a magnifier with a small spark (first-party dig).
+export function IconResearch({ size = 16 }: IconProps) {
+  return svg(size, (
+    <>
+      <circle cx="10" cy="10" r="6" />
+      <line x1="20.5" y1="20.5" x2="14.5" y2="14.5" />
+      <path d="M10 6.5v7M6.5 10h7" />
+    </>
+  ));
+}
+
+// Navigate — an arrow leaving toward a corner (jump to a destination).
+export function IconNavigate({ size = 16 }: IconProps) {
+  return svg(size, (
+    <>
+      <path d="M7 17L17 7" />
+      <path d="M9 7h8v8" />
+    </>
+  ));
+}
+
+// History — a clock, for the session rail's chat log.
+export function IconHistory({ size = 16 }: IconProps) {
+  return svg(size, (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </>
+  ));
+}
+
+// Plus — the "New chat" affordance.
+export function IconPlus({ size = 16 }: IconProps) {
+  return svg(size, (
+    <>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </>
+  ));
+}
+
+// Close / delete affordance.
+export function IconClose({ size = 16 }: IconProps) {
+  return svg(size, (
+    <>
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </>
+  ));
+}
+
+// Small check — confirm delete + waterfall "hit" rows.
+export function IconCheck({ size = 16 }: IconProps) {
+  return svg(size, <polyline points="4 12 9 17 20 6" />);
+}
+
 export function IconSend({ size = 16 }: IconProps) {
   return svg(size, (
     <>

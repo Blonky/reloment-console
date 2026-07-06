@@ -419,3 +419,43 @@ export interface ConnectionRow {
   powers: string; // one line: what this connection powers
   detail: string; // the single detail the business provides
 }
+
+// ── Agent workspace (r11) — Home becomes a real agent chat with sessions ─────
+// The Home command channel is a Manus/Sauna-style workspace: named chat SESSIONS
+// with history, plus research/enrichment and navigation capabilities. These
+// shapes mirror the platform's /api/agent/sessions CRUD so HttpClient maps 1:1.
+export interface AgentSession {
+  id: string;
+  title: string;
+  updated_at: string; // ISO — session list is sorted newest-first on this
+}
+
+// A stored transcript line. The demo persists user messages verbatim and the
+// assistant's PLAIN-TEXT narration line (not a re-runnable command) — a faithful
+// LOG of the conversation, replayed on reopen without re-executing actions.
+export interface AgentChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  body: string;
+  created_at: string; // ISO
+}
+
+// ── Research / waterfall enrichment (r11) ────────────────────────────────────
+// A first-party-only enrichment waterfall over a contact: the book, the agency's
+// own conversations, then the two capabilities that ship with the platform
+// connection (carrier lookup via the AMS connector, web research via the
+// platform). Demo mode NEVER fabricates web facts — the honesty rule: the two
+// platform-only steps report status 'needs_platform', not invented data.
+export interface ResearchStep {
+  source: 'book' | 'conversations' | 'carrier' | 'web';
+  label: string;
+  status: 'hit' | 'miss' | 'needs_platform';
+  facts: string[]; // real facts for hits; empty for miss / needs_platform
+}
+
+export interface ResearchReport {
+  contactId: string | null;
+  name: string;
+  steps: ResearchStep[];
+  consentNote: string; // the standing consent boundary — research ≠ texting
+}

@@ -6,7 +6,9 @@
 import type { DataClient } from './client.ts';
 import type {
   AgentAsk,
+  AgentChatMessage,
   AgentProfile,
+  AgentSession,
   ApproveResult,
   AuditRow,
   BookRow,
@@ -22,6 +24,7 @@ import type {
   InboundResult,
   PlaybookFlow,
   QueueItem,
+  ResearchReport,
   SearchHit,
   SteerGoal,
   Suggestion,
@@ -387,5 +390,84 @@ export class HttpClient implements DataClient {
   // Trust grid degrades honestly (nothing shown as connected without proof).
   async connections(): Promise<ConnectionRow[]> {
     return this.req<ConnectionRow[]>('/api/connections').catch(() => []);
+  }
+
+  // ── Agent workspace (r11) — maps to the platform's /api/agent/sessions CRUD ──
+  // GET/POST/DELETE /api/agent/sessions(…)/messages, mirroring the real routes.
+  // Reads that fail degrade to empty (an honest "no history yet"); writes fail
+  // silently (the UI's optimistic transcript stands until the next read).
+  async agentSessions(): Promise<AgentSession[]> {
+    // Newest-first is the platform's contract; sort defensively regardless.
+    const list = await this.req<AgentSession[]>('/api/agent/sessions').catch(() => []);
+    return list.slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  }
+
+  async createAgentSession(): Promise<AgentSession> {
+    return this.post<AgentSession>('/api/agent/sessions', {}).catch(() => ({
+      // A local placeholder so the UI can open a chat even if the write failed;
+      // it reconciles on the next agentSessions() read.
+      id: `local_${Date.now()}`,
+      title: 'New chat',
+      updated_at: new Date().toISOString(),
+    }));
+  }
+
+  async deleteAgentSession(id: string): Promise<void> {
+    await this.req<{ ok: boolean }>(`/api/agent/sessions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }).catch(() => undefined);
+  }
+
+  async agentSessionMessages(id: string): Promise<AgentChatMessage[]> {
+    return this.req<AgentChatMessage[]>(
+      `/api/agent/sessions/${encodeURIComponent(id)}/messages`,
+    ).catch(() => []);
+  }
+
+  async appendAgentMessage(id: string, role: 'user' | 'assistant', body: string): Promise<void> {
+    await this.post<{ ok: boolean }>(
+      `/api/agent/sessions/${encodeURIComponent(id)}/messages`,
+      { role, body },
+    ).catch(() => undefined);
+  }
+
+  async renameAgentSession(id: string, title: string): Promise<void> {
+    // The platform patches the session title; POST keeps the client dependency-
+    // free (no PATCH helper). A missing/failing route is a silent no-op.
+    await this.post<{ ok: boolean }>(
+      `/api/agent/sessions/${encodeURIComponent(id)}/rename`,
+      { title },
+    ).catch(() => undefined);
+  }
+
+  // Research / waterfall enrichment — POST /api/agent/enrich, mapping onto the
+  // platform's enrich_contact response shape. A missing/failing route resolves
+  // to null (the honest "no report" state) rather than throwing at the UI.
+  async researchContact(nameOrId: string): Promise<ResearchReport | null> {
+    return this.post<ResearchReport | null>('/api/agent/enrich', { query: nameOrId }).catch(
+      () => null,
+    );
+  }
+
+  // Navigation intent — computed LOCALLY, no server round-trip needed. Section
+  // words route to their surface; a contact name routes to /contacts?c=<query>
+  // (the HTTP client has no local thread map, so the contacts book is the honest
+  // target — the UI can deep-link into the conversation from there).
+  async resolveNavigate(query: string): Promise<{ label: string; href: string } | null> {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    const sections: { match: string[]; label: string; href: string }[] = [
+      { match: ['inbox', 'approvals'], label: 'Inbox', href: '/inbox' },
+      { match: ['agent', 'flows', 'playbooks'], label: 'Agent', href: '/agent' },
+      { match: ['insights', 'revenue'], label: 'Insights', href: '/insights' },
+      { match: ['settings', 'trust', 'connections'], label: 'Trust & Settings', href: '/trust' },
+      { match: ['contacts', 'book'], label: 'Contacts', href: '/contacts' },
+    ];
+    const words = q.split(/\s+/);
+    for (const s of sections) {
+      if (s.match.some((m) => words.includes(m))) return { label: s.label, href: s.href };
+    }
+    // No section matched — treat the query as a contact name search on Contacts.
+    return { label: query.trim(), href: `/contacts?q=${encodeURIComponent(query.trim())}` };
   }
 }
