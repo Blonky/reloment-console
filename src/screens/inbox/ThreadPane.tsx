@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react';
 import { Avatar, ChannelBadge, GateReason, StatusPill, Skeleton } from '../../components/index.ts';
 import type { BadgeChannel } from '../../components/index.ts';
 import type { ApproveResult, ThreadDetail, ThreadMessage } from '../../data/types.ts';
+import { useClient } from '../../shell/ClientContext.tsx';
 import DraftCard from './DraftCard.tsx';
 import {
   blockedReason,
@@ -69,7 +70,7 @@ function Bubble({ message }: { message: ThreadMessage }) {
   const channel = message.channel_accepted;
   return (
     <div className={`${styles.bubbleRow} ${outbound ? styles.outbound : styles.inbound}`}>
-      <div>
+      <div className={styles.bubbleGroup}>
         <div className={`${styles.bubble} ${outbound ? styles.bubbleOut : styles.bubbleIn}`}>
           {message.body}
         </div>
@@ -112,6 +113,7 @@ export default function ThreadPane({
   onEdit,
   onTakeover,
 }: ThreadPaneProps) {
+  const client = useClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const conversationId = detail?.conversation.id;
   const messageCount = detail?.messages.length ?? 0;
@@ -153,7 +155,7 @@ export default function ThreadPane({
         <div className={styles.threadHeadMain}>
           <span className={styles.threadHeadName}>{conversation.display_name}</span>
           <span className={`${styles.threadHeadSub} tnum`}>
-            {conversation.e164} · {localTimeIn(conversation.timezone)} local
+            {conversation.e164} · {localTimeIn(conversation.timezone, client.now())} local
           </span>
         </div>
         <span className={styles.threadHeadSpacer} />
@@ -175,7 +177,7 @@ export default function ThreadPane({
             <div key={m.id}>
               {showDivider && (
                 <div className={styles.dayDivider}>
-                  <span className={styles.dayLabel}>{dayLabel(m.created_at)}</span>
+                  <span className={styles.dayLabel}>{dayLabel(m.created_at, client.now())}</span>
                 </div>
               )}
               {isSystemEvent(m) ? <SystemEntry message={m} /> : <Bubble message={m} />}

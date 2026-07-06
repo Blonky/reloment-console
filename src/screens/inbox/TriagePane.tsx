@@ -6,6 +6,7 @@
 import { Avatar, EmptyState, StatusPill, Skeleton } from '../../components/index.ts';
 import type { TriageTag } from './inboxUtils.ts';
 import { relativeTime } from './inboxUtils.ts';
+import { useClient } from '../../shell/ClientContext.tsx';
 import styles from './InboxScreen.module.css';
 
 export interface TriageRowModel {
@@ -40,6 +41,7 @@ function RowSkeleton() {
 }
 
 export default function TriagePane({ rows, loading, selectedId, onSelect }: TriagePaneProps) {
+  const client = useClient();
   return (
     <section className={`${styles.pane} ${styles.triagePane}`} aria-label="Triage">
       <div className={styles.paneHead}>
@@ -78,7 +80,7 @@ export default function TriagePane({ rows, loading, selectedId, onSelect }: Tria
                           {row.name}
                         </span>
                         <span className={`${styles.triageTime} tnum`}>
-                          {relativeTime(row.lastAt)}
+                          {relativeTime(row.lastAt, client.now())}
                         </span>
                       </span>
                       <span className={styles.triagePreview}>{row.preview}</span>

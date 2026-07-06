@@ -24,6 +24,10 @@ import type {
 export class HttpClient implements DataClient {
   readonly mode = 'http' as const;
 
+  now(): number {
+    return Date.now();
+  }
+
   constructor(
     private readonly baseUrl: string,
     private readonly tenantId: string,

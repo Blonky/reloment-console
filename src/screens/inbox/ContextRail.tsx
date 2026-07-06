@@ -12,6 +12,7 @@ import {
   Skeleton,
 } from '../../components/index.ts';
 import type { ThreadDetail } from '../../data/types.ts';
+import { useClient } from '../../shell/ClientContext.tsx';
 import { localTimeIn, shortDate } from './inboxUtils.ts';
 import { SendIcon } from './icons.tsx';
 import styles from './InboxScreen.module.css';
@@ -44,6 +45,7 @@ function RailSkeleton() {
 }
 
 export default function ContextRail({ detail, loading, onSimulate }: ContextRailProps) {
+  const client = useClient();
   const [draftReply, setDraftReply] = useState('');
   const [sending, setSending] = useState(false);
   const conversationId = detail?.conversation.id;
@@ -105,7 +107,7 @@ export default function ContextRail({ detail, loading, onSimulate }: ContextRail
             <span className={styles.factKey}>Timezone</span>
             <span className={styles.factVal}>{conversation.timezone.split('/').pop()?.replaceAll('_', ' ')}</span>
             <span className={styles.factKey}>Local time</span>
-            <span className={`${styles.factVal} tnum`}>{localTimeIn(conversation.timezone)}</span>
+            <span className={`${styles.factVal} tnum`}>{localTimeIn(conversation.timezone, client.now())}</span>
           </div>
         </div>
 

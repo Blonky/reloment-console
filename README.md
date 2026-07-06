@@ -14,8 +14,9 @@ Governance is a feature here, not a footnote. Where a typical SaaS hides its
 refusals, this console showcases them: "Sam Ortiz was excluded — opted out" is
 the product working, and it gets the same visual dignity as a success.
 
-<!-- SCREENSHOT: add docs/screenshot-home.png (Home) and docs/screenshot-inbox.png
-     (Inbox approval cockpit) once Wave 2 ships the two hero screens. -->
+![Home — the command channel narrating a governed enrollment](docs/screenshot-home.png)
+
+![Inbox — the approval cockpit](docs/screenshot-inbox.png)
 
 ## Quickstart
 

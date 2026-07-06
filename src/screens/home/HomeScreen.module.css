@@ -1,11 +1,13 @@
 /* Home command channel — private styles. Tokens from theme.css only; hairline
    borders over shadows; 8px grid; 120–160ms ease-out motion. */
 
+/* Definite height (viewport minus topbar and the shell's 32px padding) so the
+   pulse row stays put and the transcript — not the page — is what scrolls. */
 .page {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  height: 100%;
+  height: calc(100vh - var(--topbar-h) - 64px);
   min-height: 0;
 }
 
@@ -14,7 +16,7 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr) 1.4fr;
   gap: 16px;
-  align-items: stretch;
+  align-items: start;
 }
 
 @media (max-width: 1080px) {

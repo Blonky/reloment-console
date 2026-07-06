@@ -1,7 +1,8 @@
 .shell {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg);
 }
 
@@ -9,15 +10,24 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 .main {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
+/* Flex column at min-height 100%: short screens can fill the viewport
+   (Home's channel stretches via flex: 1), long screens grow and scroll in
+   .main — never the document. */
 .content {
   max-width: var(--content-max);
+  width: 100%;
   margin: 0 auto;
   padding: 32px;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }

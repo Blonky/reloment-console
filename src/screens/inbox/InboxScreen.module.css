@@ -236,8 +236,17 @@
   justify-content: flex-end;
 }
 
-.bubble {
+/* The width cap lives on the group (a flex item of the full-width row), not
+   the bubble: a percentage max-width on the bubble would resolve against the
+   shrink-wrapped group and collapse short messages to one character per line. */
+.bubbleGroup {
   max-width: 68%;
+  min-width: 0;
+}
+
+.bubble {
+  width: fit-content;
+  max-width: 100%;
   padding: 9px 13px;
   border-radius: 14px;
   font-size: 15px;
@@ -245,6 +254,10 @@
   color: var(--ink);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.bubbleRow.outbound .bubble {
+  margin-left: auto;
 }
 
 .bubbleIn {

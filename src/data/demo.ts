@@ -35,6 +35,7 @@ import type {
 import {
   AUDIT_SAMPLE,
   CONTACTS,
+  DEMO_NOW,
   HOME_PULSE,
   LINE_AGENTS,
   OUTCOMES,
@@ -93,6 +94,12 @@ interface Enrollment {
 export class DemoClient implements DataClient {
   readonly mode = 'demo' as const;
 
+  // Pinned clock: what the UI displays (a contact's local time) must agree
+  // with what the demo gate decides (see DataClient.now).
+  now(): number {
+    return DEMO_NOW.getTime();
+  }
+
   // Mutable session state, seeded from the deterministic fixtures.
   private killSwitch = false;
   private optedOut = new Set<string>(
@@ -118,6 +125,15 @@ export class DemoClient implements DataClient {
     return out;
   }
 
+  // Monotonic session clock: every stamped event lands one minute after the
+  // previous one, starting at DEMO_NOW — so session-created messages always
+  // sort (and day-group) after the fixture timeline, never "yesterday".
+  private clockMin = 0;
+  private stamp(): string {
+    this.clockMin += 1;
+    return new Date(DEMO_NOW.getTime() + this.clockMin * 60_000).toISOString();
+  }
+
   private appendAudit(actor: string, action: string, reason: string): void {
     // Deterministic short pseudo-hash from the previous digest (no crypto dep,
     // no randomness — enough to *look* hash-chained in the audit sample).
@@ -127,7 +143,7 @@ export class DemoClient implements DataClient {
     const seed = `${prev}|${actor}|${action}|${reason}|${this.hashCounter}`;
     for (let i = 0; i < seed.length; i += 1) acc = (acc * 33 + seed.charCodeAt(i)) >>> 0;
     this.auditLog.push({
-      time: new Date().toISOString(),
+      time: this.stamp(),
       actor,
       action,
       reason,
@@ -274,7 +290,7 @@ export class DemoClient implements DataClient {
       channel_accepted: null,
       advice_verdict: 'none',
       classification: 'transactional',
-      created_at: new Date().toISOString(),
+      created_at: this.stamp(),
     });
     if (stopped) {
       this.optedOut.add(t.contactId);
@@ -349,7 +365,7 @@ export class DemoClient implements DataClient {
           channel_accepted: null,
           advice_verdict: 'none',
           classification: pb.classification,
-          created_at: new Date().toISOString(),
+          created_at: this.stamp(),
         });
       } else {
         // No existing conversation — mint one so the draft is reviewable.
@@ -366,7 +382,7 @@ export class DemoClient implements DataClient {
               channel_accepted: null,
               advice_verdict: 'none',
               classification: pb.classification,
-              created_at: new Date().toISOString(),
+              created_at: this.stamp(),
             },
           ],
         });

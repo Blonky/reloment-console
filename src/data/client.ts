@@ -23,6 +23,11 @@ export interface DataClient {
   // Identifies the backing implementation for the Topbar "Demo data" pill.
   readonly mode: 'demo' | 'http';
 
+  // The clock for every time-derived display. Demo pins it to DEMO_NOW so what
+  // the UI shows (a contact's local time) always agrees with what the demo
+  // gate decides (quiet hours); http returns the real clock.
+  now(): number;
+
   // Home
   home(): Promise<HomePulse>;
 
