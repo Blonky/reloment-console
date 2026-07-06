@@ -310,11 +310,15 @@ export default function InboxScreen() {
     [client, selectedId, refetchAll],
   );
 
-  const onRequestDocument = useCallback(
-    async (docType: string): Promise<void> => {
-      if (selectedId === null) return;
-      await client.requestDocument(selectedId, docType);
+  // Send a rich link (booking / payment / document-request) via the composer's
+  // ＋ menu. Same fail-closed gate; the link-preview bubble (or a GateReason on a
+  // block) lands via the thread refetch. Resolves false when blocked.
+  const onSendLink = useCallback(
+    async (kind: 'booking' | 'payment' | 'document_request', docType?: string): Promise<boolean> => {
+      if (selectedId === null) return false;
+      const res = await client.sendLink(selectedId, kind, docType);
       refetchAll();
+      return res.ok;
     },
     [client, selectedId, refetchAll],
   );
@@ -377,9 +381,9 @@ export default function InboxScreen() {
         sendingActive={sendingActive}
         onApprove={onApprove}
         onSend={onSend}
+        onSendLink={onSendLink}
         onToggleAgent={onToggleAgent}
         onOpenContext={() => setContextSheetOpen(true)}
-        onOpenBrief={() => setBriefOpen(true)}
         onBack={onBack}
       />
       {/* Docked rail — the grid's third column; CSS hides it below 1100px. */}
@@ -388,7 +392,8 @@ export default function InboxScreen() {
           detail={detail}
           loading={threadLoading}
           onSimulate={onSimulate}
-          onRequestDocument={onRequestDocument}
+          onOpenBrief={() => setBriefOpen(true)}
+          refreshKey={discoveryNonce}
         />
       </div>
       {/* Context sheet — the same rail as a right slide-over below 1100px. */}
@@ -404,7 +409,8 @@ export default function InboxScreen() {
               detail={detail}
               loading={threadLoading}
               onSimulate={onSimulate}
-              onRequestDocument={onRequestDocument}
+              onOpenBrief={() => setBriefOpen(true)}
+              refreshKey={discoveryNonce}
               variant="sheet"
               onClose={() => setContextSheetOpen(false)}
             />

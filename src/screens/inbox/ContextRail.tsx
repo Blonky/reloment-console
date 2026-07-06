@@ -1,39 +1,43 @@
-// Context rail — the right pane. Contact card (LOB, policy status, renewal date,
-// timezone + computed local time), Memory (atoms as quiet bullets with
-// provenance), consent chips, and a demo-only "Simulate customer reply" input
-// with a one-click STOP quick-chip. On send it calls simulateInbound and the
-// screen refetches — an opt-out visibly flips the thread state (DESIGN.md §5).
+// Context rail — the right pane, restructured into the INTELLIGENCE panel (r9).
+// In order:
+//   (a) POLICY   — one compact fact line (LOB · status · renewal).
+//   (b) CONSENT  — the consent chips + quiet-hours window.
+//   (c) BRIEF    — the conversation summary folded IN (2 sentences from
+//                  conversationBrief(), auto-refreshing on suggestion/message
+//                  events) with a small "Ask" affordance opening the existing
+//                  ConversationBrief Inspector for Q&A + key moments.
+//   (d) MEMORY   — atoms as quiet bullets, capped at 3 with a "+N more" toggle.
+//   (e) ASKS     — the agent's contact-scoped asks for THIS contact (ask + why),
+//                  a quiet accent left border.
+//   (f) DEMO     — a visually distinct inset block ("{First}'s phone · demo") to
+//                  play the customer and watch the loop respond. Document-request
+//                  chips have moved OUT to the composer ＋ menu.
+//
+// The whole rail must fit unscrolled at 1512×860 — Memory collapses behind the
+// "+N more" toggle so the panel stays tight.
 
-import { useEffect, useState } from 'react';
-import {
-  Button,
-  ConsentChips,
-  Skeleton,
-} from '../../components/index.ts';
-import type { ThreadDetail } from '../../data/types.ts';
+import { useEffect, useMemo, useState } from 'react';
+import { ConsentChips, Skeleton } from '../../components/index.ts';
+import type { AgentAsk, ConversationBrief, ThreadDetail } from '../../data/types.ts';
+import { useClient } from '../../shell/ClientContext.tsx';
 import { firstNameOf, shortDate } from './inboxUtils.ts';
-import { SendIcon } from './icons.tsx';
+import { SendIcon, SparkleIcon } from './icons.tsx';
 import styles from './InboxScreen.module.css';
 
 export interface ContextRailProps {
   detail: ThreadDetail | undefined;
   loading: boolean;
   onSimulate: (text: string) => Promise<void>;
-  // Demo: ask the customer for a document; the reply lands as a media part.
-  onRequestDocument: (docType: string) => Promise<void>;
+  // Opens the shared ConversationBrief Inspector (Q&A + key moments).
+  onOpenBrief: () => void;
+  // A nonce that bumps after any mutation so the rail re-derives the brief +
+  // asks (they evolve with the thread — new message, new suggestion, etc.).
+  refreshKey: number;
   // 'docked' (default): the right pane of the cockpit grid. 'sheet': the
   // slide-over shown below 1100px; renders a close button, Escape closes.
   variant?: 'docked' | 'sheet';
   onClose?: () => void;
 }
-
-// The three offered document types (§7). Chip label → docType passed to the
-// request; the client crafts a realistic media reply per type.
-const DOC_TYPES: { label: string; docType: string }[] = [
-  { label: 'Dec page', docType: 'declarations page' },
-  { label: "Driver's license", docType: "driver's license" },
-  { label: 'Damage photos', docType: 'photos of the damage' },
-];
 
 // Small ✕ glyph for the sheet header close button.
 const CloseIcon = (
@@ -67,30 +71,59 @@ export default function ContextRail({
   detail,
   loading,
   onSimulate,
-  onRequestDocument,
+  onOpenBrief,
+  refreshKey,
   variant = 'docked',
   onClose,
 }: ContextRailProps) {
+  const client = useClient();
   const [draftReply, setDraftReply] = useState('');
   const [sending, setSending] = useState(false);
-  const [requesting, setRequesting] = useState(false);
+  const [memoryExpanded, setMemoryExpanded] = useState(false);
+  const [brief, setBrief] = useState<ConversationBrief | null>(null);
+  const [asks, setAsks] = useState<AgentAsk[]>([]);
   const conversationId = detail?.conversation.id;
+  const contactId = detail?.conversation.contact_id;
   const isSheet = variant === 'sheet';
 
-  // Clear the composer when the selected conversation changes.
+  // Clear the composer + collapse memory when the selected conversation changes.
   useEffect(() => {
     setDraftReply('');
+    setMemoryExpanded(false);
   }, [conversationId]);
 
-  async function requestDoc(docType: string) {
-    if (requesting) return;
-    setRequesting(true);
-    try {
-      await onRequestDocument(docType);
-    } finally {
-      setRequesting(false);
+  // Fold the conversation summary INTO the rail — refetched when the thread
+  // changes AND on every mutation (refreshKey bumps on suggestion.updated /
+  // message events) so the 2-sentence recap stays current.
+  useEffect(() => {
+    if (conversationId === undefined) {
+      setBrief(null);
+      return;
     }
-  }
+    let live = true;
+    void client.conversationBrief(conversationId).then((b) => {
+      if (live) setBrief(b);
+    });
+    return () => {
+      live = false;
+    };
+  }, [client, conversationId, refreshKey]);
+
+  // The agent's asks for THIS contact (contact-scoped). Recomputed on the same
+  // cadence — cheap deterministic derive, never invented.
+  useEffect(() => {
+    if (contactId === undefined) {
+      setAsks([]);
+      return;
+    }
+    let live = true;
+    void client.agentAsks().then((all) => {
+      if (live) setAsks(all.filter((a) => a.scope === 'contact' && a.contactId === contactId));
+    });
+    return () => {
+      live = false;
+    };
+  }, [client, contactId, refreshKey]);
 
   // Sheet mode: Escape closes.
   useEffect(() => {
@@ -102,10 +135,15 @@ export default function ContextRail({
     return () => window.removeEventListener('keydown', onKey);
   }, [isSheet, onClose]);
 
+  // Take the first two sentences of the summary for the folded rail brief.
+  const shortSummary = useMemo(() => {
+    if (brief === null) return null;
+    const sentences = brief.summary.match(/[^.!?]+[.!?]+/g);
+    if (sentences === null) return brief.summary;
+    return sentences.slice(0, 2).join(' ').trim();
+  }, [brief]);
+
   const paneClass = isSheet ? styles.sheetInner : `${styles.pane} ${styles.railPane}`;
-  // Docked mode drops the "Context" pane title (§ decluttered — the rail's
-  // contact card already names what this is). Sheet mode keeps a slim header
-  // only to carry the close button.
   const head = isSheet ? (
     <div className={styles.paneHead}>
       <span className={styles.paneTitle}>Context</span>
@@ -148,23 +186,22 @@ export default function ContextRail({
   const { conversation, memory, consents } = detail;
   const renewal = shortDate(conversation.x_date);
   const first = firstNameOf(conversation.display_name);
-  // The thread header already carries name + local time, so the rail leads with
-  // the policy facts the header can't show: LOB · policy status · renewal.
-  // Avatar/name and the local-time are dropped here (no cross-pane repetition).
   const facts = [
     conversation.lob,
     policyLabel(conversation.policy_status),
     renewal !== null ? `Renews ${renewal}` : null,
   ].filter((v): v is string => v !== null);
-  // Memory capped at 3 (§ debloat — the rail must fit unscrolled).
-  const memoryShown = memory.slice(0, 3);
+  // Memory capped at 3 unless expanded; the rest hide behind a "+N more" toggle
+  // so the rail fits unscrolled at 1512×860.
+  const memoryShown = memoryExpanded ? memory : memory.slice(0, 3);
+  const memoryHidden = memory.length - memoryShown.length;
 
   return (
     <aside className={paneClass} aria-label="Context">
       {head}
 
       <div className={styles.railScroll}>
-        {/* Policy facts — what the thread header doesn't show. One quiet line. */}
+        {/* (a) POLICY — one quiet fact line. */}
         <div className={styles.railSectionTight}>
           <span className={styles.railSectionLabel}>Policy</span>
           <div className={styles.factLine}>
@@ -177,7 +214,7 @@ export default function ContextRail({
           </div>
         </div>
 
-        {/* Consent — a tight single row under a smaller label. */}
+        {/* (b) CONSENT — a tight single row under a smaller label. */}
         <div className={styles.railSectionTight}>
           <span className={styles.railSectionLabel}>Consent</span>
           <ConsentChips
@@ -187,33 +224,92 @@ export default function ContextRail({
           />
         </div>
 
-        {/* Memory — capped at 3, quiet bullets. */}
+        {/* (c) BRIEF — the conversation summary folded in, with an "Ask"
+            affordance opening the ConversationBrief Inspector for depth. */}
         <div className={styles.railSectionTight}>
-          <span className={styles.railSectionLabel}>Memory</span>
-          {memoryShown.length === 0 ? (
-            <span className={styles.simHint}>No memory atoms recorded yet.</span>
+          <div className={styles.railBriefHead}>
+            <span className={styles.railSectionLabel}>Brief</span>
+            <button
+              type="button"
+              className={styles.railAskBtn}
+              onClick={onOpenBrief}
+              aria-label="Ask about this conversation"
+            >
+              <SparkleIcon size={13} />
+              Ask
+            </button>
+          </div>
+          {shortSummary === null ? (
+            <Skeleton width="100%" height={13} />
           ) : (
-            <ul className={styles.memoryList}>
-              {memoryShown.map((atom, i) => (
-                <li key={`${atom.source}-${i}`} className={styles.memoryItem}>
-                  <span className={styles.memoryBullet} />
-                  <span className={styles.memoryBody}>
-                    <span>{atom.value}</span>
-                    <span className={styles.memoryProvenance}>
-                      {atom.source.replaceAll('_', ' ')}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <p className={styles.railBriefSummary}>{shortSummary}</p>
           )}
         </div>
 
-        {/* Simulate — a micro-label, an input row, and ghost chips. No boxed
-            card, no 3-line explainer (§ debloat). START shows only while opted
-            out; the compliance boundary is customer-only. */}
+        {/* (d) MEMORY — capped at 3, quiet bullets, "+N more" toggle. */}
         <div className={styles.railSectionTight}>
-          <span className={styles.railSectionLabel}>Simulate {first} · demo</span>
+          <span className={styles.railSectionLabel}>Memory</span>
+          {memory.length === 0 ? (
+            <span className={styles.simHint}>No memory atoms recorded yet.</span>
+          ) : (
+            <>
+              <ul className={styles.memoryList}>
+                {memoryShown.map((atom, i) => (
+                  <li key={`${atom.source}-${i}`} className={styles.memoryItem}>
+                    <span className={styles.memoryBullet} />
+                    <span className={styles.memoryBody}>
+                      <span>{atom.value}</span>
+                      <span className={styles.memoryProvenance}>
+                        {atom.source.replaceAll('_', ' ')}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {memoryHidden > 0 && (
+                <button
+                  type="button"
+                  className={styles.railMoreBtn}
+                  onClick={() => setMemoryExpanded(true)}
+                >
+                  +{memoryHidden} more
+                </button>
+              )}
+              {memoryExpanded && memory.length > 3 && (
+                <button
+                  type="button"
+                  className={styles.railMoreBtn}
+                  onClick={() => setMemoryExpanded(false)}
+                >
+                  Show less
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* (e) AGENT ASKS — contact-scoped asks for this contact. Accent border. */}
+        {asks.length > 0 && (
+          <div className={styles.railSectionTight}>
+            <span className={styles.railSectionLabel}>Agent asks</span>
+            <ul className={styles.askList}>
+              {asks.map((a) => (
+                <li key={a.id} className={styles.askItem}>
+                  <span className={styles.askItemAsk}>{a.ask}</span>
+                  <span className={styles.askItemWhy}>{a.why}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* (f) DEMO — a distinct inset block: play the customer, watch the loop.
+            The doc-request chips have moved to the composer ＋ menu. */}
+        <div className={styles.railDemo}>
+          <span className={styles.railDemoTitle}>{first}&rsquo;s phone · demo</span>
+          <span className={styles.railDemoCaption}>
+            Play the customer to watch the loop respond.
+          </span>
           <div className={styles.simInputRow}>
             <input
               className={styles.simInput}
@@ -227,15 +323,15 @@ export default function ContextRail({
                 if (e.key === 'Enter') void send(draftReply);
               }}
             />
-            <Button
-              variant="secondary"
-              size="sm"
+            <button
+              type="button"
+              className={styles.railDemoSend}
               aria-label="Send simulated reply"
               disabled={sending || draftReply.trim() === ''}
               onClick={() => void send(draftReply)}
             >
-              <SendIcon />
-            </Button>
+              <SendIcon size={15} />
+            </button>
           </div>
           <div className={styles.simChips}>
             <button
@@ -261,26 +357,6 @@ export default function ContextRail({
           <span className={styles.simHint}>
             {detail.optedOut ? 'Only the customer can opt back in.' : 'STOP records an opt-out.'}
           </span>
-        </div>
-
-        {/* Request a document — three ghost chips. The ask is gated (a silent
-            no-op if opted out); on a clear gate the customer replies with a
-            media part that lands as an attachment chip in the thread. */}
-        <div className={styles.railSectionTight}>
-          <span className={styles.railSectionLabel}>Request a document · demo</span>
-          <div className={styles.simChips}>
-            {DOC_TYPES.map((d) => (
-              <button
-                key={d.docType}
-                type="button"
-                className={styles.simGhostChip}
-                disabled={requesting}
-                onClick={() => void requestDoc(d.docType)}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
     </aside>

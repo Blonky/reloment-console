@@ -1,17 +1,17 @@
 // Home pulse surfaces (DESIGN.md §5).
 //
-// Idle: the AnalyticsBand — four compact stat cards + a slim Signals card
-// (at most three single-line rows, action link inline at the end of each line).
+// Idle: the BriefingBand — the "Today" daily briefing (Needs you / Overnight /
+// Worth a call) from homeBriefing(), plus a slim strip of the top agent asks.
 // Active: the PulseStrip — one quiet line of inline pill stats above the
 // transcript, live-updating after enroll/kill commands. No dashboard clutter.
 //
-// Signals are *derived and factual*, computed from the same governed reads the
-// command surface uses — never invented. Each carries a quiet action that
-// dispatches the corresponding command into the surface.
+// Every field is *derived and factual*, composed from the same governed reads
+// the command surface uses (see DemoClient.homeBriefing / agentAsks) — never
+// invented, no hardcoded stats.
 
 import { Link } from 'react-router-dom';
 import { Skeleton } from '../../components/index.ts';
-import type { BookRow, Contact, HomePulse } from '../../data/types.ts';
+import type { AgentAsk, HomeBriefing, HomePulse } from '../../data/types.ts';
 import styles from './HomeScreen.module.css';
 
 function dollars(cents: number): string {
@@ -21,186 +21,127 @@ function dollars(cents: number): string {
   })}`;
 }
 
-export interface Signal {
-  tone: 'hold' | 'info' | 'ok';
-  text: string;
-  action?: { label: string; command: string };
-}
-
-// Derive signals from the live book + lapsed read. Factual counts only.
-export function deriveSignals(contacts: Contact[], lapsed: BookRow[]): Signal[] {
-  const out: Signal[] = [];
-
-  // 1) Aged win-back candidates — lapsed quotes past the win-back window,
-  //    eligible (not opted out, marketing consent on file).
-  const eligibleWinback = lapsed.filter((r) => {
-    const c = contacts.find((x) => x.display_name === r.display_name);
-    return c && !c.optedOut && c.consents.includes('marketing');
-  });
-  if (eligibleWinback.length > 0) {
-    out.push({
-      tone: 'hold',
-      text: `${eligibleWinback.length} win-back ${
-        eligibleWinback.length === 1 ? 'candidate' : 'candidates'
-      } past the 60-day window, eligible to re-engage.`,
-      action: { label: 'Enroll win-back', command: 'Enroll win-back' },
-    });
-  }
-
-  // 2) Threads routed to a licensed human — advice-adjacent, awaiting a reply.
-  const routed = contacts.filter(
-    (c) => c.lob !== null && c.policy_status === 'new_lead' && c.consents.length === 1,
-  );
-  if (routed.length > 0) {
-    out.push({
-      tone: 'info',
-      text: `${routed.length} ${
-        routed.length === 1 ? 'thread' : 'threads'
-      } routed to a licensed human, awaiting a reply.`,
-      action: {
-        label: `Brief me on ${routed[0].display_name.split(' ')[0]}`,
-        command: `Brief me on ${routed[0].display_name.split(' ')[0]}`,
-      },
-    });
-  }
-
-  // 3) Opt-outs on file — the governance floor made visible.
-  const optedOut = contacts.filter((c) => c.optedOut);
-  if (optedOut.length > 0) {
-    out.push({
-      tone: 'ok',
-      text: `${optedOut.length} ${
-        optedOut.length === 1 ? 'contact' : 'contacts'
-      } opted out — permanently excluded from every send.`,
-    });
-  }
-
-  return out.slice(0, 3);
-}
-
-// A compact stat card — label (11px uppercase ink-2) / Fraunces value / 11px
-// sub. `to` makes the whole card a hover-lift link; `valueOk` tints the value
-// (Recovered only, the single colored number in the band).
-function Stat({
-  label,
-  value,
-  sub,
-  to,
-  valueOk,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  to?: string;
-  valueOk?: boolean;
-}) {
-  const inner = (
-    <>
-      <span className={styles.statLabel}>{label}</span>
-      <span className={`${styles.statValue}${valueOk ? ` ${styles.statValueOk}` : ''}`}>
-        {value}
-      </span>
-      <span className={styles.statSub}>{sub}</span>
-    </>
-  );
-  if (to !== undefined) {
-    return (
-      <Link to={to} className={`${styles.statCard} ${styles.statCardLink}`}>
-        {inner}
-      </Link>
-    );
-  }
-  return <div className={styles.statCard}>{inner}</div>;
-}
-
-// ── Idle: the analytics band (stat cards + slim Signals card) ─────────────────
-export function AnalyticsBand({
+// Replaces the analytics stat band + signals rows with ONE cohesive briefing
+// from homeBriefing(): a 3-column card (Needs you / Overnight / Worth a call),
+// then a slim strip of the top agent asks. The pulse numbers live compactly
+// INSIDE this band — no separate stat row. Every field is derived, never
+// hardcoded (see DemoClient.homeBriefing / agentAsks).
+export function BriefingBand({
+  briefing,
   pulse,
-  signals,
-  signalsLoading,
+  loading,
   onRun,
 }: {
+  briefing: HomeBriefing | undefined;
   pulse: HomePulse | undefined;
-  signals: Signal[];
-  signalsLoading: boolean;
+  loading: boolean;
   onRun: (command: string) => void;
 }) {
-  return (
-    <div className={styles.band}>
-      <div className={styles.statRow}>
-        {!pulse ? (
-          [0, 1, 2, 3].map((i) => (
-            <div className={styles.statCard} key={i}>
-              <Skeleton width={80} height={11} />
-              <div style={{ height: 6 }} />
-              <Skeleton width={52} height={22} />
+  if (loading || briefing === undefined) {
+    return (
+      <div className={styles.briefingBand}>
+        <div className={styles.briefingGrid}>
+          {[0, 1, 2].map((i) => (
+            <div className={styles.briefingCol} key={i}>
+              <Skeleton width={90} height={11} />
+              <div style={{ height: 8 }} />
+              <Skeleton width="100%" height={13} />
+              <Skeleton width="80%" height={13} />
             </div>
-          ))
-        ) : (
-          <>
-            <Stat
-              label="Needs your eyes"
-              value={String(pulse.needsYourEyes)}
-              sub="drafts & routed"
-              to="/inbox"
-            />
-            <Stat
-              label="Running"
-              value={String(pulse.conversationsRunning)}
-              sub="active threads"
-            />
-            <Stat
-              label="Renewals 30d"
-              value={String(pulse.renewalsNext30d)}
-              sub="up for renewal"
-            />
-            <Stat
-              label="Recovered"
-              value={dollars(pulse.wonBackCents)}
-              sub="attributed"
-              valueOk
-            />
-          </>
-        )}
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const recovered = pulse ? dollars(pulse.wonBackCents) : null;
+  const running = pulse?.conversationsRunning ?? null;
+  // Top 2 asks (tenant + contact mixed) for the slim strip beneath the grid.
+  const topAsks: AgentAsk[] = briefing.asks.slice(0, 2);
+
+  return (
+    <div className={styles.briefingBand}>
+      <div className={styles.briefingGrid}>
+        {/* Needs you — approvals + asks, each a link into the work. */}
+        <section className={styles.briefingCol}>
+          <span className={styles.briefingLabel}>Needs you</span>
+          {briefing.needsYou.length === 0 ? (
+            <p className={styles.briefingEmpty}>Nothing waiting on you.</p>
+          ) : (
+            <ul className={styles.briefingList}>
+              {briefing.needsYou.map((n) => (
+                <li key={n.label}>
+                  <Link to={n.href} className={styles.briefingLink}>
+                    <span className={`${styles.briefingCount} tnum`}>{n.count}</span>
+                    <span>{n.label}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Overnight — plain-English recap; running count folded in compactly. */}
+        <section className={styles.briefingCol}>
+          <span className={styles.briefingLabel}>Overnight</span>
+          <ul className={styles.briefingList}>
+            {briefing.overnight.map((line, i) => (
+              <li key={i} className={styles.briefingLine}>
+                {line}
+              </li>
+            ))}
+            {running !== null && running > 0 && (
+              <li className={styles.briefingLineMuted}>
+                <span className="tnum">{running}</span>{' '}
+                {running === 1 ? 'conversation' : 'conversations'} running now
+                {recovered !== null && (
+                  <>
+                    {' · '}
+                    <span className={styles.briefingOk}>{recovered}</span> recovered
+                  </>
+                )}
+              </li>
+            )}
+          </ul>
+        </section>
+
+        {/* Worth a call — the top of the call list, each with one reason. */}
+        <section className={styles.briefingCol}>
+          <span className={styles.briefingLabel}>Worth a call</span>
+          {briefing.callOut.length === 0 ? (
+            <p className={styles.briefingEmpty}>No calls ranked today.</p>
+          ) : (
+            <ul className={styles.briefingList}>
+              {briefing.callOut.map((c) => (
+                <li key={c.name} className={styles.briefingCall}>
+                  <Link to="/contacts" className={styles.briefingCallName}>
+                    {c.name}
+                  </Link>
+                  <span className={styles.briefingCallReason}>{c.reason}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
 
-      {/* Slim Signals card — at most three single-line rows, action inline. */}
-      <div className={styles.signalsCard}>
-        {signalsLoading ? (
-          <div className={styles.signals}>
-            <Skeleton height={13} />
-            <Skeleton height={13} width="70%" />
-          </div>
-        ) : signals.length === 0 ? (
-          <p className={styles.signalEmpty}>Nothing needs your attention right now.</p>
-        ) : (
-          <div className={styles.signals}>
-            {signals.map((s, i) => (
-              <div className={styles.signalRow} key={i}>
-                <span
-                  className={`${styles.signalDot} ${
-                    s.tone === 'info'
-                      ? styles.signalDotInfo
-                      : s.tone === 'ok'
-                        ? styles.signalDotOk
-                        : ''
-                  }`}
-                />
-                <span className={styles.signalText}>{s.text}</span>
-                {s.action && (
-                  <button
-                    type="button"
-                    className={styles.signalAction}
-                    onClick={() => onRun(s.action!.command)}
-                  >
-                    {s.action.label} →
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Slim strip — the top agent asks (tenant + contact mixed), max 2. */}
+      {topAsks.length > 0 && (
+        <div className={styles.briefingAsks}>
+          {topAsks.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              className={styles.briefingAskRow}
+              onClick={() => onRun(a.contactName ? `Brief me on ${a.contactName.split(' ')[0]}` : 'call list')}
+              title={a.why}
+            >
+              <span className={styles.briefingAskDot} />
+              <span className={styles.briefingAskText}>{a.ask}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

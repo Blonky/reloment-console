@@ -5,6 +5,7 @@
 
 import type { DataClient } from './client.ts';
 import type {
+  AgentAsk,
   ApproveResult,
   AuditRow,
   BookRow,
@@ -15,6 +16,7 @@ import type {
   ConversationBrief,
   EnrollResult,
   FeedEvent,
+  HomeBriefing,
   HomePulse,
   InboundResult,
   QueueItem,
@@ -203,6 +205,39 @@ export class HttpClient implements DataClient {
       `/api/threads/${encodeURIComponent(conversationId)}/request_document`,
       { docType },
     ).catch(() => undefined);
+  }
+
+  // Send a rich-link message (booking / payment / document_request). The backend
+  // re-runs the send gate (fail-closed): a clear gate returns { ok:true }; a
+  // block returns { ok:false, blockedReason }. The provider unfurls the link into
+  // a preview card; the outbound carries a LinkPart on message.sent over the SSE
+  // stream. A missing/failing route degrades to a gate_error rather than throwing.
+  sendLink(
+    conversationId: string,
+    kind: 'booking' | 'payment' | 'document_request',
+    docType?: string,
+  ): Promise<{ ok: boolean; blockedReason?: string }> {
+    return this.post<{ ok: boolean; blockedReason?: string }>(
+      `/api/threads/${encodeURIComponent(conversationId)}/send_link`,
+      { kind, docType },
+    ).catch(() => ({ ok: false, blockedReason: 'gate_error' }));
+  }
+
+  // Agent asks — the agent's prompts back to the business. Served empty rather
+  // than faked when the route is absent, so the briefing degrades honestly.
+  async agentAsks(): Promise<AgentAsk[]> {
+    return this.req<AgentAsk[]>('/api/agent-asks').catch(() => []);
+  }
+
+  // Home briefing — one composed read. A missing route degrades to an honest
+  // empty briefing rather than throwing at the UI.
+  async homeBriefing(): Promise<HomeBriefing> {
+    return this.req<HomeBriefing>('/api/home-briefing').catch(() => ({
+      needsYou: [],
+      overnight: [],
+      callOut: [],
+      asks: [],
+    }));
   }
 
   async queryBook(kind: 'renewals' | 'lapsed'): Promise<BookRow[]> {

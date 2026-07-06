@@ -14,9 +14,9 @@ import type { BadgeChannel } from '../../components/index.ts';
 import type { ApproveResult, Suggestion, ThreadDetail, ThreadMessage } from '../../data/types.ts';
 import { useClient } from '../../shell/ClientContext.tsx';
 import AgentToggle from './AgentToggle.tsx';
-import Composer, { type ComposerHandle } from './Composer.tsx';
+import Composer, { type ComposerHandle, type LinkKind } from './Composer.tsx';
 import SuggestionSlot from './SuggestionSlot.tsx';
-import { SparkleIcon } from './icons.tsx';
+import { LinkIcon } from './icons.tsx';
 import {
   blockedReason,
   clockTime,
@@ -45,13 +45,13 @@ export interface ThreadPaneProps {
   // Send a free-text message as the business (sendManual). Resolves false if the
   // gate blocked it.
   onSend: (body: string) => Promise<boolean>;
+  // Send a rich link (booking / payment / document-request) via sendLink().
+  onSendLink: (kind: LinkKind, docType?: string) => Promise<boolean>;
   // Flip the per-conversation Agent ON/OFF switch.
   onToggleAgent: (enabled: boolean) => Promise<void>;
   // Opens the context sheet — the button is CSS-hidden above 1100px, where the
   // rail is docked in the grid instead.
   onOpenContext: () => void;
-  // Opens the conversation-brief Inspector overlay.
-  onOpenBrief: () => void;
   // Mobile back chevron: clears ?c= to return to the triage list. CSS-hidden
   // above 768px, where both panes are visible side by side.
   onBack: () => void;
@@ -179,10 +179,28 @@ function AttachmentChip({ filename, mime, bytes }: { filename: string; mime: str
   );
 }
 
+// An outbound link part rendered as a rich link-preview card inside the bubble
+// group — mirrors the provider's native unfurl (title + domain + link glyph).
+function LinkCard({ title, domain }: { title: string; domain: string }) {
+  return (
+    <div className={styles.linkCard}>
+      <span className={styles.linkGlyph}>
+        <LinkIcon size={16} />
+      </span>
+      <span className={styles.linkMeta}>
+        <span className={styles.linkTitle}>{title}</span>
+        <span className={styles.linkDomain}>{domain}</span>
+      </span>
+    </div>
+  );
+}
+
 function Bubble({ message }: { message: ThreadMessage }) {
   const outbound = message.direction === 'outbound';
   const channel = message.channel_accepted;
-  const media = (message.parts ?? []).filter((p) => p.type === 'media');
+  const parts = message.parts ?? [];
+  const media = parts.filter((p) => p.type === 'media');
+  const links = parts.filter((p) => p.type === 'link');
   return (
     <div className={`${styles.bubbleRow} ${outbound ? styles.outbound : styles.inbound}`}>
       <div className={styles.bubbleGroup}>
@@ -196,6 +214,9 @@ function Bubble({ message }: { message: ThreadMessage }) {
             mime={p.mime_type}
             bytes={p.size_bytes}
           />
+        ))}
+        {links.map((p, i) => (
+          <LinkCard key={`${p.url}-${i}`} title={p.title} domain={p.domain} />
         ))}
         <div className={`${styles.bubbleMeta} ${outbound ? '' : styles.inMeta}`}>
           {outbound && channel !== null && (
@@ -235,9 +256,9 @@ export default function ThreadPane({
   sendingActive,
   onApprove,
   onSend,
+  onSendLink,
   onToggleAgent,
   onOpenContext,
-  onOpenBrief,
   onBack,
 }: ThreadPaneProps) {
   const client = useClient();
@@ -331,14 +352,6 @@ export default function ThreadPane({
         )}
         <button
           type="button"
-          className={styles.briefButton}
-          onClick={onOpenBrief}
-          aria-label="Conversation brief"
-        >
-          <SparkleIcon />
-        </button>
-        <button
-          type="button"
           className={styles.contextToggle}
           onClick={onOpenContext}
           aria-label="Open context panel"
@@ -393,7 +406,12 @@ export default function ThreadPane({
             onApprove={onApprove}
             onUse={(body) => composerRef.current?.loadDraft(body)}
           />
-          <Composer ref={composerRef} firstName={firstName} onSend={onSend} />
+          <Composer
+            ref={composerRef}
+            firstName={firstName}
+            onSend={onSend}
+            onSendLink={onSendLink}
+          />
         </div>
       )}
     </section>

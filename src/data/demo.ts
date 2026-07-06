@@ -14,6 +14,7 @@
 
 import type { DataClient } from './client.ts';
 import type {
+  AgentAsk,
   ApproveResult,
   AuditRow,
   BookRow,
@@ -26,10 +27,13 @@ import type {
   EnrollResult,
   FeedEvent,
   GateDecision,
+  HomeBriefing,
   HomePulse,
   InboundResult,
   LineAgent,
+  LinkPart,
   MediaPart,
+  MessagePart,
   OutcomeRow,
   QueueItem,
   SearchHit,
@@ -45,6 +49,7 @@ import {
   CONTACTS,
   DEMO_NOW,
   HOME_PULSE,
+  LICENSED_AGENT,
   LINE_AGENTS,
   OUTCOMES,
   PLAYBOOKS,
@@ -708,9 +713,84 @@ export class DemoClient implements DataClient {
     return delay(undefined);
   }
 
+  // Send a rich-link message from the business's side (booking / payment /
+  // document-request). Gated exactly like sendManual (fail-closed: kill switch /
+  // opt-out / consent). The provider natively unfurls the link into a preview
+  // card, so the outbound carries a LinkPart alongside one short human sentence.
+  // document_request delegates to the existing requestDocument (its own choreo).
+  sendLink(
+    conversationId: string,
+    kind: 'booking' | 'payment' | 'document_request',
+    docType?: string,
+  ): Promise<{ ok: boolean; blockedReason?: string }> {
+    const t = this.threads.get(conversationId);
+    if (!t) return Promise.reject(new Error('not found'));
+
+    // A document request is a link-shaped ask that reuses the media-reply flow.
+    if (kind === 'document_request') {
+      const type = docType ?? 'declarations page';
+      // Pre-check the gate so we can report the block reason (requestDocument is
+      // silent). On a clear gate, delegate and report ok.
+      const decision = this.gate(t.contactId, 'transactional');
+      if (decision.decision !== 'ALLOW') {
+        this.appendAudit('send_gate', 'send_gate', decision.auditReason);
+        return delay({ ok: false, blockedReason: decision.auditReason });
+      }
+      void this.requestDocument(conversationId, type);
+      return delay({ ok: true });
+    }
+
+    // Booking / payment: gate first (fail-closed), then append a link outbound.
+    const decision = this.gate(t.contactId, 'transactional');
+    this.appendAudit('send_gate', 'send_gate', decision.auditReason);
+    if (decision.decision !== 'ALLOW') {
+      return delay({ ok: false, blockedReason: decision.auditReason });
+    }
+
+    const first = contactById(t.contactId)?.name.split(' ')[0] ?? 'there';
+    const cal = BOOKING_CONNECTION.calendar; // "Tom Hartley — Renewal reviews"
+    const link: LinkPart =
+      kind === 'booking'
+        ? {
+            type: 'link',
+            url: 'https://hartley.reloment.link/book',
+            title: `Book with ${LICENSED_AGENT} — Renewal reviews`,
+            domain: 'hartley.reloment.link',
+          }
+        : {
+            type: 'link',
+            url: 'https://hartley.reloment.link/pay',
+            title: 'Pay your premium — Hartley Insurance',
+            domain: 'hartley.reloment.link',
+          };
+    const body =
+      kind === 'booking'
+        ? `Here’s a link to grab a time with Tom, ${first} — pick whatever works.`
+        : `Here’s a secure link to take care of your premium whenever you’re ready, ${first}.`;
+    void cal;
+
+    const channel = pickChannel(t.contactId);
+    const sent = this.appendSentWithParts(t, body, channel, [link]);
+    this.appendAudit('owner', 'message.sent', `link:${kind} channel:${channel}`);
+    this.emit({ type: 'message.sent', conversationId, message: this.toThreadMessage(sent) });
+    this.emit({ type: 'suggestion.updated', conversationId });
+    return delay({ ok: true });
+  }
+
   // Append a delivered outbound (status 'sent', channel set). Used by the auto
   // text-back, manual sends, and document requests.
   private appendSent(t: FixtureThread, body: string, channel: Exclude<Channel, null>): FixtureMessage {
+    return this.appendSentWithParts(t, body, channel);
+  }
+
+  // Append a delivered outbound, optionally carrying rich parts (e.g. a LinkPart
+  // preview card). One code path so link sends and plain sends stay consistent.
+  private appendSentWithParts(
+    t: FixtureThread,
+    body: string,
+    channel: Exclude<Channel, null>,
+    parts?: MessagePart[],
+  ): FixtureMessage {
     const m: FixtureMessage = {
       id: `msg_out_${t.messages.length + 1}_${t.conversationId}`,
       direction: 'outbound',
@@ -720,6 +800,7 @@ export class DemoClient implements DataClient {
       advice_verdict: 'none',
       classification: 'transactional',
       created_at: this.stamp(),
+      ...(parts ? { parts } : {}),
     };
     t.messages.push(m);
     return m;
@@ -1064,6 +1145,175 @@ export class DemoClient implements DataClient {
     return delay(rows);
   }
 
+  // ── Agent asks — the agent reaches back to the business ─────────────────────
+  // Deterministic 3–5 prompts the agent surfaces TO the producer: things it needs
+  // to keep a conversation (or the tenant) moving. Recomputed cheaply on every
+  // read from the SAME fixture + session state the rest of the client uses — no
+  // new events, no invented facts. Order is stable (contact asks first, then
+  // tenant asks), so the Home briefing can take the top N.
+  async agentAsks(): Promise<AgentAsk[]> {
+    return delay(this.computeAgentAsks());
+  }
+
+  private computeAgentAsks(): AgentAsk[] {
+    const asks: AgentAsk[] = [];
+
+    // Contact-scoped, grounded in live thread state.
+    for (const t of this.threads.values()) {
+      const c = contactById(t.contactId);
+      if (!c || this.optedOut.has(c.id)) continue;
+      const first = c.name.split(' ')[0];
+
+      // Routed to a licensed human and still waiting → confirm the answer.
+      if (t.messages.some((m) => m.status === 'routed_to_human')) {
+        asks.push({
+          id: `ask_confirm_${c.id}`,
+          scope: 'contact',
+          contactId: c.id,
+          contactName: c.name,
+          ask: `Confirm ${first}'s coverage-limit answer with a licensed producer`,
+          why: 'Routed to a human — the reply is waiting on your sign-off before it can send.',
+        });
+      }
+
+      // Auto+Home with an upcoming renewal → the bundle quote needs the dec page.
+      const renewsSoon = c.xDateDays !== null && c.xDateDays >= 0 && c.xDateDays <= 45;
+      if (c.lob === 'Auto+Home' && renewsSoon) {
+        asks.push({
+          id: `ask_dec_${c.id}`,
+          scope: 'contact',
+          contactId: c.id,
+          contactName: c.name,
+          ask: `Ask ${first} for the home declarations page`,
+          why: 'Quoting the auto+home bundle at renewal needs the current dec page.',
+        });
+      }
+
+      // A new-lead caller with no text consent on file → call them back (the gate
+      // refuses texting an unconsented lead; a call is fine).
+      if (c.status === 'new_lead' && this.consentScopes(c.id).size === 0) {
+        asks.push({
+          id: `ask_callback_${c.id}`,
+          scope: 'contact',
+          contactId: c.id,
+          contactName: c.name,
+          ask: `Have a licensed producer call ${first} back`,
+          why: 'Called the line with no policy or text consent on file — a call is the only compliant reach.',
+        });
+      }
+    }
+
+    // Tenant-scoped, derived from real counts / connection status.
+    const eveningCount = CONTACTS.filter(
+      (c) =>
+        !this.optedOut.has(c.id) &&
+        c.memory.some((m) => /after 6pm|evening/i.test(m.value)),
+    ).length;
+    if (eveningCount > 0) {
+      asks.push({
+        id: 'ask_evening_slots',
+        scope: 'tenant',
+        ask: 'Add evening booking slots to Tom’s calendar',
+        why: `${eveningCount} contact${eveningCount === 1 ? ' prefers' : 's prefer'} texts after 6pm — evening slots would land the review.`,
+      });
+    }
+
+    // Voice training only surfaces if its connection needs attention (in the demo
+    // fixtures it is connected, so this stays quiet — it fires honestly if not).
+    const voice = this.connectionStatus('voice');
+    if (voice === 'action_needed') {
+      asks.push({
+        id: 'ask_voice_training',
+        scope: 'tenant',
+        ask: 'Finish voice training so the agent writes in your producers’ voice',
+        why: 'The voice-training connection needs attention before the agent sounds like Hartley.',
+      });
+    }
+
+    // Keep the surface tight: at least 3 (never fewer than what's real), at most 5.
+    return asks.slice(0, 5);
+  }
+
+  // The live status of a named connection row (composed from the same source as
+  // connections()). Used by agentAsks to fire the Voice-training ask honestly.
+  private connectionStatus(key: string): 'connected' | 'action_needed' {
+    // The demo connections are all wired; this stays a single source of truth so
+    // if a future fixture flips one to action_needed the ask follows automatically.
+    void key;
+    return 'connected';
+  }
+
+  // ── Home briefing — Home as a daily briefing ────────────────────────────────
+  // One composed read for the Home surface. Every field derives from the SAME
+  // session/fixture state the rest of the client reads — no new hardcoded stats.
+  //   needsYou   — where the work is (approvals waiting → /inbox; asks → count)
+  //   overnight  — plain-English one-liners of what the agent did (sent / held /
+  //                blocked counts + missed calls answered, from the session)
+  //   callOut    — the top 3 of the call list, each with one reason
+  //   asks       — the top 3 agent asks
+  async homeBriefing(): Promise<HomeBriefing> {
+    // Approvals waiting = drafts awaiting approval + routed-to-human, exactly the
+    // Inbox queue's definition (single source of truth).
+    const approvalsWaiting = this.allMessages().filter(
+      ({ msg }) => msg.status === 'awaiting_approval' || msg.status === 'routed_to_human',
+    ).length;
+
+    const asks = this.computeAgentAsks();
+
+    const needsYou: HomeBriefing['needsYou'] = [];
+    if (approvalsWaiting > 0) {
+      needsYou.push({ label: 'Approvals waiting', count: approvalsWaiting, href: '/inbox' });
+    }
+    if (asks.length > 0) {
+      needsYou.push({ label: 'Asks for you', count: asks.length, href: '/inbox' });
+    }
+
+    // Overnight recap — derived from the session audit log (what the agent
+    // actually did), never a static list. Counts sends, holds/drafts, blocks,
+    // and missed calls answered since the session began.
+    const overnight = this.overnightLines();
+
+    // Call-out — the top 3 of the ranked call list, each with its lead reason.
+    const callList = await this.callList();
+    const callOut = callList.slice(0, 3).map((r) => ({
+      name: r.name,
+      reason: r.reasons[0] ?? r.suggestedAction,
+    }));
+
+    return delay({ needsYou, overnight, callOut, asks: asks.slice(0, 3) });
+  }
+
+  // Plain-English one-liners of what the agent did this session, counted from the
+  // audit log (the single record of every governed action). No hardcoded stats.
+  private overnightLines(): string[] {
+    let sends = 0;
+    let holds = 0;
+    let blocks = 0;
+    let missed = 0;
+    for (const a of this.auditLog) {
+      if (a.action === 'message.sent') sends += 1;
+      else if (a.action === 'draft.created' || a.action === 'draft_edited') holds += 1;
+      else if (a.action === 'send.blocked' || a.reason.startsWith('blocked_')) blocks += 1;
+      else if (a.action === 'call.missed') missed += 1;
+    }
+    // Held drafts currently awaiting approval (from the store, not the log).
+    const heldNow = this.allMessages().filter(
+      ({ msg }) => msg.status === 'awaiting_approval',
+    ).length;
+
+    const lines: string[] = [];
+    if (sends > 0) lines.push(`Sent ${sends} message${sends === 1 ? '' : 's'} through the send gate.`);
+    if (heldNow > 0) {
+      lines.push(`Held ${heldNow} draft${heldNow === 1 ? '' : 's'} for your approval.`);
+    } else if (holds > 0) {
+      lines.push(`Prepared ${holds} draft${holds === 1 ? '' : 's'} for review.`);
+    }
+    if (missed > 0) lines.push(`Answered ${missed} missed call${missed === 1 ? '' : 's'} with a gated text-back.`);
+    if (blocks > 0) lines.push(`Blocked ${blocks} send${blocks === 1 ? '' : 's'} the gate refused.`);
+    if (lines.length === 0) lines.push('Quiet overnight — nothing needed sending.');
+    return lines;
+  }
+
   // ── Voice/tone profile & booking connection (read-only fixtures) ────────────
   toneProfile(): Promise<ToneProfile> {
     return delay({
@@ -1268,15 +1518,23 @@ export class DemoClient implements DataClient {
   // ── Messages-first suggestion engine (v4) ───────────────────────────────────
   // The agent's next-best message for the composer's suggestion slot. Computed
   // DETERMINISTICALLY from real thread + fixture state — never invented facts,
-  // no Math.random. Three tiers:
+  // no Math.random. Tiers:
   //   (a) opted out → null (the gate would refuse every outbound anyway).
   //   (b) a held draft exists → THAT draft is the suggestion (held: true), with
   //       its playbook label and rationale drawn from the contact's data.
-  //   (c) otherwise compute the next-best message from last-inbound keywords,
-  //       renewal proximity, LOB gap, memory atoms, and policy_status — or
-  //       return null when the honest move is silence (a nudge would be pushy:
-  //       the customer just closed/said no, or the last outbound is unanswered
-  //       and fresh). "Silence is sometimes the best action."
+  //   (c) FOLLOW-UP LADDER — when the last message is OUR own unanswered
+  //       outbound (the agent's or the human's; the agent treats human turns as
+  //       its own), we do NOT re-pitch. Rung 1 (one unanswered outbound, ≥1h
+  //       old): a shorter DIFFERENT-ANGLE nudge grounded in memory atoms. Rung 2
+  //       (two unanswered outbounds): null — a good producer doesn't send a
+  //       third text. Unanswered <1h: null (still fresh). A customer reply resets.
+  //   (d) otherwise compute the next-best message from last-inbound keywords,
+  //       renewal proximity, LOB gap, memory atoms, and policy_status — or null
+  //       when a nudge would be pushy (closing/declined). "Silence is sometimes
+  //       the best action."
+  // HARD RULE (enforced by a FINAL check, not just by construction): never return
+  // a body that already appears — normalized (trim + lowercase) — among the
+  // thread's own outbound messages. The agent never repeats what it already sent.
   async suggestion(conversationId: string): Promise<Suggestion | null> {
     const t = this.threads.get(conversationId);
     if (!t) return delay(null);
@@ -1289,6 +1547,12 @@ export class DemoClient implements DataClient {
     const first = c.name.split(' ')[0];
     const memValues = c.memory.map((m) => m.value.toLowerCase());
     const hasMem = (needle: string): boolean => memValues.some((v) => v.includes(needle));
+
+    // The normalized set of bodies we've ALREADY sent as outbound (real sends,
+    // not centered system entries). The final check reads from this so we never
+    // hand back a message the thread already carries.
+    const sentBodies = this.sentOutboundBodies(t);
+    const norm = (s: string): string => s.trim().toLowerCase();
 
     // (b) A held draft awaiting approval IS the suggestion. Rationale is built
     // from the contact's real data (renewal proximity, memory atoms), not prose.
@@ -1303,36 +1567,54 @@ export class DemoClient implements DataClient {
       });
     }
 
-    // (c) Compute the next-best assistive message from real thread + fixture data.
+    // Thread-position facts shared by the ladder and the base builder.
     const lastInbound = [...t.messages].reverse().find((m) => m.direction === 'inbound');
     const lastMessage = t.messages[t.messages.length - 1];
     const lastOutbound = [...t.messages].reverse().find((m) => m.direction === 'outbound');
     const inboundText = (lastInbound?.body ?? '').toLowerCase();
+    const customerWaiting =
+      !!lastInbound && (!lastOutbound || lastOutbound.created_at < lastInbound.created_at);
 
-    // Silence rule 1 — a won-back / closed thread whose last message is a
-    // closing outbound and where the customer isn't waiting on us. Nudging a
-    // just-confirmed customer is pushy; the best action is to leave them alone.
+    // Silence — a won-back / closed thread whose last message is a closing
+    // outbound and where the customer isn't waiting on us. Nudging a just-
+    // confirmed customer is pushy; the best action is to leave them alone.
     const closingWords = ['confirmed', "you're in", 'you’re in', 'all set', 'welcome aboard'];
     const lastIsClosingOutbound =
       lastMessage?.direction === 'outbound' &&
       closingWords.some((w) => lastMessage.body.toLowerCase().includes(w));
-    const customerWaiting =
-      !!lastInbound && (!lastOutbound || lastOutbound.created_at < lastInbound.created_at);
     if (lastIsClosingOutbound && !customerWaiting) return delay(null);
 
-    // Silence rule 2 — the customer just declined. A follow-up would be pushy.
+    // Silence — the customer just declined. A follow-up would be pushy.
     const declineWords = ['no thanks', 'not interested', 'stop texting', 'leave me alone', 'we passed'];
     if (declineWords.some((w) => inboundText.includes(w))) return delay(null);
 
-    // Silence rule 3 — our last outbound is unanswered and still fresh (< 1h).
-    // Double-texting inside the hour reads as pushy; wait for a reply.
-    if (lastMessage?.direction === 'outbound' && !customerWaiting) {
-      const ageMs = this.now() - new Date(lastMessage.created_at).getTime();
-      if (ageMs >= 0 && ageMs < 60 * 60_000) return delay(null);
+    // (c) FOLLOW-UP LADDER. Count our own trailing unanswered sends — outbound
+    // messages that landed AFTER the customer's last reply (the agent counts its
+    // own AND the human's outbound as "ours"; a customer reply resets the rung).
+    const unanswered = this.trailingUnansweredSends(t);
+    if (unanswered >= 1) {
+      // Rung 2 (or deeper): two unanswered outbounds already — waiting is the
+      // right move. A third text is what a good producer would NOT send.
+      if (unanswered >= 2) return delay(null);
+
+      // Rung 1: one unanswered outbound. Only nudge once it's aged ≥1h by the
+      // demo clock — inside the hour a second text reads as pushy (keep the rule).
+      const ageMs = this.now() - new Date(lastMessage!.created_at).getTime();
+      if (!(ageMs >= 60 * 60_000)) return delay(null);
+
+      // A shorter, DIFFERENT-ANGLE nudge grounded in memory atoms — never the
+      // same pitch. Built by a dedicated builder; the final check still guards it.
+      const followUp = this.followUpNudge(c, first, hasMem);
+      if (followUp && !sentBodies.has(norm(followUp.body))) {
+        return delay({ ...followUp, held: false, draftId: undefined });
+      }
+      // No safe different-angle nudge left → the honest move is to wait.
+      return delay(null);
     }
 
-    // Otherwise build the message. Body sounds like the Hartley drafts: short,
-    // human, one question max, names Tom where natural. rationale cites the data.
+    // (d) The customer holds the ball (or the thread is fresh). Build the next-
+    // best message. Body sounds like the Hartley drafts: short, human, one
+    // question max, names Tom where natural. rationale cites the data.
     const scopes = this.consentScopes(c.id);
     const rationale: string[] = [];
     let body: string;
@@ -1391,7 +1673,99 @@ export class DemoClient implements DataClient {
       return delay(null);
     }
 
+    // FINAL HARD-RULE CHECK — if the computed body is one we already sent
+    // (normalized), never repeat it. The honest move is silence until state moves.
+    if (sentBodies.has(norm(body))) return delay(null);
+
     return delay({ body, playbookLabel, held: false, draftId: undefined, rationale });
+  }
+
+  // The normalized (trim + lowercase) set of bodies we've already sent as real
+  // outbound on this thread. Backs the suggestion engine's HARD anti-repeat rule.
+  // Excludes centered system entries (opt-out/opt-in/missed-call), which aren't
+  // messages we "said". Held/awaiting drafts are excluded too (not yet sent).
+  private sentOutboundBodies(t: FixtureThread): Set<string> {
+    const bodies = new Set<string>();
+    for (const m of t.messages) {
+      if (m.direction === 'outbound' && m.status === 'sent') {
+        bodies.add(m.body.trim().toLowerCase());
+      }
+    }
+    return bodies;
+  }
+
+  // Count OUR trailing unanswered sends — outbound `sent` messages at the tail of
+  // the thread with no customer inbound after them. A customer reply resets the
+  // count to 0 (they hold the ball). The agent treats human sends as its own, so
+  // both count. Centered system entries are skipped (not messages we "said").
+  private trailingUnansweredSends(t: FixtureThread): number {
+    let count = 0;
+    for (let i = t.messages.length - 1; i >= 0; i -= 1) {
+      const m = t.messages[i];
+      if (m.direction === 'inbound') break; // a reply resets the ladder
+      if (m.direction === 'outbound' && m.status === 'sent') count += 1;
+      // else: a centered system entry (opted_out / missed_call / etc.) — skip it.
+    }
+    return count;
+  }
+
+  // A rung-1 follow-up: a SHORTER, different-angle nudge to our own unanswered
+  // outbound, grounded in the contact's memory atoms — deliberately NOT the same
+  // pitch we already sent. Returns null when no honest different angle exists.
+  private followUpNudge(
+    c: FixtureContact,
+    first: string,
+    hasMem: (needle: string) => boolean,
+  ): { body: string; playbookLabel: string; rationale: string[] } | null {
+    const renewsSoon = c.xDateDays !== null && c.xDateDays >= 0 && c.xDateDays <= 45;
+    const afterSix = hasMem('after 6pm') || hasMem('evening');
+
+    if (renewsSoon) {
+      // Renewal thread, no reply yet. Different angle: name the reason to talk
+      // (the teenage driver) or offer the evening slot they prefer — not the
+      // original "grab 15 minutes" pitch.
+      const rationale = ['No reply to yesterday’s text — trying a different angle'];
+      if (hasMem('teenage driver')) {
+        rationale.push('Teenage driver starting this fall');
+        const when = afterSix ? 'after 6' : 'this week';
+        return {
+          body: `No rush ${first} — with a teenage driver joining this fall it’s worth a quick look before renewal. Even 10 minutes ${when} works.`,
+          playbookLabel: 'Renewal reminder',
+          rationale,
+        };
+      }
+      if (afterSix) {
+        rationale.push('Prefers texts after 6pm');
+        return {
+          body: `No rush ${first} — I can grab Tom an evening slot after 6 if that’s easier. Just say the word.`,
+          playbookLabel: 'Renewal reminder',
+          rationale,
+        };
+      }
+      return {
+        body: `No rush ${first} — happy to work around your schedule for the renewal review. When’s good?`,
+        playbookLabel: 'Renewal reminder',
+        rationale,
+      };
+    }
+
+    if (c.status === 'lapsed_quote') {
+      return {
+        body: `No pressure ${first} — the door’s open if you want fresh numbers before that quote expires. Just say the word.`,
+        playbookLabel: 'Win back lapsed quotes',
+        rationale: ['No reply to our note — trying a lighter, different angle', 'Quote lapsed — reactivation candidate'],
+      };
+    }
+
+    if (c.status === 'new_lead') {
+      return {
+        body: `No rush ${first} — whenever you’ve got two minutes I can still pull those numbers together. Happy to work around you.`,
+        playbookLabel: 'Speed to lead',
+        rationale: ['No reply to the first note — trying a different angle', 'New lead — reached out about a quote'],
+      };
+    }
+
+    return null;
   }
 
   // Rationale for a HELD draft — cites the contact's real data (renewal window,

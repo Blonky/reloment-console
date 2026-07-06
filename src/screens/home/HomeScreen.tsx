@@ -43,9 +43,8 @@ import { disclosureFor } from './gateChecks.ts';
 import KillSwitchCard from './KillSwitchCard.tsx';
 import type { KillSwitchMode } from './KillSwitchCard.tsx';
 import {
-  AnalyticsBand,
+  BriefingBand,
   PulseStrip,
-  deriveSignals,
 } from './PulseRow.tsx';
 import { IconSend } from './icons.tsx';
 
@@ -150,19 +149,14 @@ export default function HomeScreen() {
   const { setKillSwitch } = useKillSwitch();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Pulse — refetched after mutating commands so the tiles react live.
+  // Pulse — refetched after mutating commands so the numbers react live.
   const pulse = useData(() => client.home(), [client]);
-  // The book context for signals + name resolution (contacts, lapsed read).
-  const book = useData(
-    () => Promise.all([client.contacts(), client.queryBook('lapsed')]),
-    [client],
-  );
-  const contacts = book.data?.[0] ?? [];
-  const lapsed = book.data?.[1] ?? [];
-  const signals = useMemo(
-    () => (book.data ? deriveSignals(contacts, lapsed) : []),
-    [book.data, contacts, lapsed],
-  );
+  // The daily briefing (r9) — one composed read replacing the analytics band +
+  // signals; refetched after mutating commands (enroll increments the asks/needs).
+  const briefing = useData(() => client.homeBriefing(), [client]);
+  // Contacts for name resolution ("brief me on dana").
+  const book = useData(() => client.contacts(), [client]);
+  const contacts = book.data ?? [];
 
   // Deterministic greeting from the client clock + live pulse.
   const greeting = useMemo(
@@ -255,7 +249,7 @@ export default function HomeScreen() {
           };
           resolveThinking(<EnrollCard result={result} meta={meta} />);
           pulse.refetch(); // "Needs your eyes" increments — the demo moment
-          book.refetch();
+          briefing.refetch(); // needs-you / asks counts update in the briefing
           break;
         }
         case 'campaign_status': {
@@ -318,6 +312,7 @@ export default function HomeScreen() {
             <MissedCallReply conversationId={conversationId} meta={meta} />,
           );
           pulse.refetch(); // a new conversation is now running
+          briefing.refetch(); // overnight recap gains the answered missed call
           break;
         }
         case 'pause': {
@@ -347,7 +342,7 @@ export default function HomeScreen() {
     // submit is defined below; it is stable via useCallback and referenced
     // through the ref pattern to avoid a cycle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, contacts, resolveThinking, runKillSwitch, pulse, book],
+    [client, contacts, resolveThinking, runKillSwitch, pulse, briefing],
   );
 
   // Submit a line: render the user turn, a thinking row, then dispatch.
@@ -501,10 +496,10 @@ export default function HomeScreen() {
         <div className={styles.composerSlotIdle}>{composer}</div>
 
         <div className={styles.bandIdle}>
-          <AnalyticsBand
+          <BriefingBand
+            briefing={briefing.data}
             pulse={pulse.data}
-            signals={signals}
-            signalsLoading={book.loading}
+            loading={briefing.loading && briefing.data === undefined}
             onRun={(cmd) => void submit(cmd)}
           />
         </div>

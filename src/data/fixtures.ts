@@ -10,7 +10,7 @@ import type {
   Channel,
   Classification,
   Direction,
-  MediaPart,
+  MessagePart,
   MessageStatus,
 } from './types.ts';
 
@@ -203,7 +203,7 @@ export interface FixtureMessage {
   advice_verdict: AdviceVerdict;
   classification: Classification;
   created_at: string;
-  parts?: MediaPart[];
+  parts?: MessagePart[];
 }
 export interface FixtureThread {
   conversationId: string;
@@ -245,7 +245,7 @@ const danaThread: FixtureThread = {
     msg('inbound', 'Hey is my policy going up again this year??', -95),
     msg(
       'outbound',
-      'Hi Dana — your auto+home renews Aug 2. Rates shifted this year, so Tom’s set aside time to review your options before anything changes. Want Thursday at 5:30, after work?',
+      'Hi Dana — your auto+home renews Jul 28. Rates shifted this year, so Tom’s set aside time to review your options before anything changes. Want Thursday at 5:30, after work?',
       -90,
       { status: 'awaiting_approval', channel: null, cls: 'transactional' },
     ),
@@ -523,7 +523,7 @@ export const TONE_PROFILE = {
     generic:
       'Dear valued customer, your policy is approaching its renewal date. Please contact our office at your earliest convenience to discuss your coverage options and any applicable rate adjustments.',
     tuned:
-      'Hi Dana — your auto+home renews Aug 2. Rates shifted this year, so Tom’s set aside time to go over your options first. Want Thursday at 5:30, after work?',
+      'Hi Dana — your auto+home renews Jul 28. Rates shifted this year, so Tom’s set aside time to go over your options first. Want Thursday at 5:30, after work?',
   },
 } as const;
 

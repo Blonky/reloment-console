@@ -3,31 +3,59 @@
    fills the column edge-to-edge like a mail client. Hairlines over shadows,
    8px grid, 120–160ms ease-out transitions only. */
 
-/* Cancel the shell's .content padding (32px) and center-clamp so the cockpit
+/* Cancel the shell's .content padding (40px) and center-clamp so the cockpit
    spans the full column width and height. Negative margins reclaim the padding;
-   the fixed height makes each pane scroll independently. */
+   the fixed height makes each pane scroll independently.
+
+   RESPONSIVE CONTRACT (r9): the grid must NEVER exceed the viewport at any size.
+   The flanking panes are FLUID via minmax() with clamped ceilings, and the
+   thread column is the only 1fr — so the sum is always ≤ 100% and the thread
+   absorbs every extra/short pixel. No fixed-px column sum that can overflow. */
 .cockpit {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr) 280px;
+  grid-template-columns:
+    minmax(240px, 300px)
+    minmax(0, 1fr)
+    minmax(240px, 300px);
   height: calc(100vh - var(--topbar-h));
+  min-height: 0;
   margin: -40px;
   background: var(--surface);
   border-top: 1px solid var(--line);
 }
 
-/* ≤1280 viewport: the three-pane grid gets tight — trim the flanking panes so
-   the thread keeps room to breathe. */
+/* ≤1280 viewport: the three-pane grid gets tight — shrink the flanking-pane
+   ceilings so the thread keeps room to breathe, and trim inner paddings. */
 @media (max-width: 1280px) {
   .cockpit {
-    grid-template-columns: 280px minmax(0, 1fr) 260px;
+    grid-template-columns:
+      minmax(224px, 264px)
+      minmax(0, 1fr)
+      minmax(224px, 272px);
+  }
+
+  .threadHead {
+    padding: 0 16px;
+  }
+
+  .threadScroll {
+    padding: 16px 16px 8px;
+  }
+
+  .composerDock {
+    padding: 10px 16px 12px;
+  }
+
+  .railScroll {
+    padding: 14px;
   }
 }
 
 /* <1100: drop the context rail from the grid; it becomes a right-hand sheet
-   opened from the thread header's "Context" button. */
+   opened from the thread header's "Context" button. Two fluid columns only. */
 @media (max-width: 1099px) {
   .cockpit {
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: minmax(224px, 300px) minmax(0, 1fr);
   }
 }
 
@@ -624,6 +652,67 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Link-preview card — a compact rounded card inside the bubble group mirroring
+   the provider's native rich-link unfurl: title + domain line + a small link
+   glyph. Sits under the one-sentence outbound bubble. */
+.linkCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.bubbleRow.outbound .linkCard {
+  margin-left: auto;
+}
+
+.linkGlyph {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.linkMeta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.linkTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.linkDomain {
+  font-size: 11px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* System / timeline entries — centered hairline, not bubbles. */
 .systemEntry {
   display: flex;
@@ -897,8 +986,8 @@
 .composerField {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  padding: 5px 5px 5px 14px;
+  gap: 6px;
+  padding: 5px;
   border: 1px solid var(--line-strong);
   border-radius: 22px;
   background: var(--surface);
@@ -917,12 +1006,138 @@
   border: none;
   outline: none;
   background: none;
-  padding: 6px 0;
+  padding: 6px 4px;
   font-size: 15px;
   line-height: 1.4;
   color: var(--ink);
   max-height: 96px;
   overflow-y: auto;
+}
+
+/* ＋ menu — the circular trigger inside-left + its upward popover. */
+.plusWrap {
+  position: relative;
+  flex: none;
+  align-self: flex-end;
+}
+
+.composerPlus {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: none;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.composerPlus:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.composerPlus[aria-expanded='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.composerPlus:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Upward popover — hairline card, shadow-float, anchored above-left the ＋. */
+.plusMenu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 12;
+  min-width: 224px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+  animation: plus-menu-in var(--dur) var(--ease);
+}
+
+@keyframes plus-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.plusMenuRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+
+.plusMenuRow:hover {
+  background: var(--surface-2);
+}
+
+.plusMenuRowSub {
+  padding-left: 36px;
+  font-weight: 450;
+  color: var(--ink-2);
+}
+
+.plusMenuRowSub:hover {
+  color: var(--ink);
+}
+
+.plusMenuIcon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-2);
+}
+
+.plusMenuLabel {
+  flex: 1;
+  min-width: 0;
+}
+
+.plusMenuChevron {
+  flex: none;
+  display: inline-flex;
+  color: var(--ink-2);
+  transition: transform var(--dur) var(--ease);
+}
+
+.plusMenuChevronOpen {
+  transform: rotate(90deg);
+}
+
+.plusMenuDivider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
 }
 
 .composerInput::placeholder {
@@ -1052,6 +1267,152 @@
 .memoryProvenance {
   font-size: 11px;
   color: var(--ink-2);
+}
+
+/* ── Rail: Brief (folded summary + Ask affordance) ──────────────────────────── */
+.railBriefHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.railAskBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.railAskBtn:hover {
+  box-shadow: var(--shadow-soft);
+  color: var(--accent);
+  border-color: var(--line-strong);
+}
+
+.railBriefSummary {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* "+N more" / "Show less" — a quiet inline text toggle. */
+.railMoreBtn {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.railMoreBtn:hover {
+  opacity: 0.72;
+  text-decoration: underline;
+}
+
+/* ── Rail: Agent asks (contact-scoped) — quiet accent left border ───────────── */
+.askList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.askItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid var(--accent);
+}
+
+.askItemAsk {
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.askItemWhy {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+/* ── Rail: demo block — a visually distinct inset ("{First}'s phone · demo") ──
+   Slightly darker surface + a dashed hairline top, so it reads as the CUSTOMER
+   side, clearly separate from the composer (which is the business side). */
+.railDemo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border-top: 1px dashed var(--line-strong);
+}
+
+.railDemoTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.railDemoCaption {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+/* Demo send button — a small square, distinct from the business composer's
+   circular accent send (this side is the customer). */
+.railDemoSend {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.railDemoSend:hover:not(:disabled) {
+  box-shadow: var(--shadow-soft);
+}
+
+.railDemoSend:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* Simulate — a micro-label + input row + ghost chips (no boxed card). */

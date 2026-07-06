@@ -130,6 +130,19 @@ export interface MediaPart {
   size_bytes: number;
 }
 
+// Outbound messages can carry a rich-link part, mirroring the provider's native
+// link-preview unfurling ({ type:'link', url, title, domain }) — a booking or
+// payment link rendered as a tappable card, not a bare URL.
+export interface LinkPart {
+  type: 'link';
+  url: string;
+  title: string;
+  domain: string;
+}
+
+// A message part is either inbound media or an outbound rich link.
+export type MessagePart = MediaPart | LinkPart;
+
 export interface ThreadMessage {
   id: string;
   direction: Direction;
@@ -138,7 +151,7 @@ export interface ThreadMessage {
   channel_accepted: Channel;
   advice_verdict: AdviceVerdict;
   created_at: string;
-  parts?: MediaPart[];
+  parts?: MessagePart[];
 }
 
 export interface MemoryAtom {
@@ -171,6 +184,32 @@ export interface Suggestion {
   held: boolean; // true when this is a gate-held draft awaiting approval
   draftId?: string; // present when held — approve(draftId) sends it
   rationale: string[]; // 1–3 short data-aware reasons, e.g. "Renews Aug 2"
+}
+
+// ── Agent asks (the agent reaches back to the business) ─────────────────────
+// Deterministic prompts the agent surfaces TO the producer — things it needs
+// from the business to keep a conversation or the tenant moving. Derived cheaply
+// from fixture + session state on every read; never invented facts.
+export interface AgentAsk {
+  id: string;
+  scope: 'contact' | 'tenant';
+  contactId?: string; // present for contact-scoped asks
+  contactName?: string; // present for contact-scoped asks
+  ask: string; // the imperative ask, e.g. "Ask Dana for her home declarations page"
+  why: string; // one plain-English reason grounded in real state
+}
+
+// ── Home briefing (Home becomes a daily briefing) ───────────────────────────
+// A single composed read for the Home surface — all four fields derive from the
+// SAME session/fixture state the rest of the client reads (no new hardcoded
+// stats). needsYou links to where the work is; overnight recaps what the agent
+// did in plain English; callOut is the top of the call list; asks is the top of
+// agentAsks.
+export interface HomeBriefing {
+  needsYou: { label: string; count: number; href: string }[];
+  overnight: string[]; // plain-English one-liners of what the agent did
+  callOut: { name: string; reason: string }[]; // top of the call list
+  asks: AgentAsk[]; // top agent asks
 }
 
 // ── approve → ApproveResult ─────────────────────────────────────────────────

@@ -61,6 +61,33 @@
   margin: 0 auto;
 }
 
+/* 720–860px tall: the briefing band is taller than the old stat band, so tighten
+   the greeting/band spacing and shrink the spacers to keep the idle surface
+   inside one viewport (the hard rule holds at ≥720px height). */
+@media (min-height: 720px) and (max-height: 860px) {
+  .greeting {
+    font-size: clamp(26px, 2.6vw, 32px);
+  }
+
+  .greetBlock {
+    margin-bottom: 14px;
+    gap: 6px;
+  }
+
+  .bandIdle {
+    margin-top: 14px;
+  }
+
+  .idleSpacer {
+    flex: 0 1 8px;
+    min-height: 0;
+  }
+
+  .honesty {
+    margin-top: 8px;
+  }
+}
+
 /* Below 720px tall: graceful page scroll — min-content heights, never clip. */
 @media (max-height: 719px) {
   .pageIdle {
@@ -69,7 +96,7 @@
   }
 
   .idleSpacer {
-    flex: 0 0 24px;
+    flex: 0 0 20px;
     min-height: 0;
   }
 }
@@ -383,6 +410,191 @@
   border-radius: var(--radius);
   box-shadow: var(--shadow-soft);
   padding: 12px 16px;
+}
+
+/* ── "Today" briefing band (idle, r9) ─────────────────────────────────────────
+   One cohesive card: a 3-column grid (Needs you / Overnight / Worth a call) that
+   stacks below 1100px, then a slim strip of the top agent asks. The pulse
+   numbers live compactly inside the columns — no separate stat row. */
+.briefingBand {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.briefingGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.briefingCol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+
+.briefingCol + .briefingCol {
+  border-left: 1px solid var(--line);
+}
+
+.briefingLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-2);
+}
+
+.briefingList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.briefingEmpty {
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 0;
+}
+
+/* Needs-you link — a count chip + label; the whole row is a hover-underline. */
+.briefingLink {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: color var(--dur) var(--ease);
+}
+
+.briefingLink:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.briefingCount {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink);
+  font-optical-sizing: auto;
+}
+
+.briefingLink:hover .briefingCount {
+  color: var(--accent);
+}
+
+/* Overnight plain-English lines. */
+.briefingLine {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.briefingLineMuted {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.briefingOk {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+/* Worth-a-call entries — name (link) over one reason line. */
+.briefingCall {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.briefingCallName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  transition: color var(--dur) var(--ease);
+}
+
+.briefingCallName:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.briefingCallReason {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+/* Slim strip of top agent asks (tenant + contact mixed), max 2. */
+.briefingAsks {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.briefingAskRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 18px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+
+.briefingAskRow + .briefingAskRow {
+  border-top: 1px solid var(--line);
+}
+
+.briefingAskRow:hover {
+  background: rgba(28, 27, 23, 0.03);
+}
+
+.briefingAskDot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.briefingAskText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Below 1100px the 3-up grid stacks to one column (columns become rows). */
+@media (max-width: 1100px) {
+  .briefingGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .briefingCol + .briefingCol {
+    border-left: none;
+    border-top: 1px solid var(--line);
+  }
 }
 
 /* ── Honesty footer ─────────────────────────────────────────────────────── */

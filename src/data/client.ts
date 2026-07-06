@@ -3,6 +3,7 @@
 // set, else the deterministic DemoClient (the default open-source experience).
 
 import type {
+  AgentAsk,
   ApproveResult,
   AuditRow,
   BookRow,
@@ -13,6 +14,7 @@ import type {
   ConversationBrief,
   EnrollResult,
   FeedEvent,
+  HomeBriefing,
   HomePulse,
   InboundResult,
   LineAgent,
@@ -65,6 +67,21 @@ export interface DataClient {
   simulateMissedCall(): Promise<{ conversationId: string }>;
   sendManual(conversationId: string, body: string): Promise<{ ok: boolean; blockedReason?: string }>;
   requestDocument(conversationId: string, docType: string): Promise<void>;
+  // Send a rich-link message (booking / payment / document-request) from the
+  // business's side. Gated exactly like sendManual (opted out / kill switch →
+  // blocked). The provider natively unfurls the link as a preview card; the
+  // outbound carries a LinkPart. document_request delegates to requestDocument.
+  sendLink(
+    conversationId: string,
+    kind: 'booking' | 'payment' | 'document_request',
+    docType?: string,
+  ): Promise<{ ok: boolean; blockedReason?: string }>;
+
+  // The agent reaches back to the business: 3–5 deterministic asks (things it
+  // needs to keep a conversation or the tenant moving), recomputed on read.
+  agentAsks(): Promise<AgentAsk[]>;
+  // Home as a daily briefing — one composed read over existing session state.
+  homeBriefing(): Promise<HomeBriefing>;
 
   // Command channel / tools
   queryBook(kind: 'renewals' | 'lapsed'): Promise<BookRow[]>;

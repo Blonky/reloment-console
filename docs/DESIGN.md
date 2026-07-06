@@ -219,7 +219,14 @@ The console must be *presentable and usable* on a phone (~390px):
 
 ### Inbox (`/inbox`) — the approval cockpit
 
-Three-pane: **triage list (300px) | thread (flex) | context rail (280px)**.
+Three-pane: **triage list | thread (flex) | context rail**. The flanking panes
+are **fluid** (`minmax(240px, 300px)`, tightening to `minmax(224px, 264/272px)`
+≤1280); the thread column is the only `1fr`, so the grid never exceeds 100% and
+the thread absorbs every extra/short pixel. Inner paddings tighten ≤1280. The
+rail collapses to the sheet <1100px, single-pane flow ≤768px. **No fixed-px
+column sum can overflow the viewport — the cockpit never clips at any window
+size**, and the SuggestionSlot + Composer are the bottom anchor (the transcript
+scrolls; they don't).
 
 - Triage list: each row = avatar initials, name, one-line last message, and a
   **context tag** (StatusPill: "Awaiting approval", "Routed to human",
@@ -236,10 +243,26 @@ Three-pane: **triage list (300px) | thread (flex) | context rail (280px)**.
   **Take over** (ghost — human takes the thread, agent stands down).
   On approve: result renders honestly — sent (with the channel it went as),
   held (GateReason, amber), or blocked (GateReason, calm red).
-- Context rail: contact card (LOB, policy status, renewal date, timezone +
-  local time), **Memory** (memory atoms as quiet bulleted facts with
-  provenance), consent chips, and a demo-only "Simulate customer reply" input
-  (with a STOP quick-chip) so the whole governed loop is demoable in-browser.
+- Context rail — the **intelligence panel** (r9), in order: (a) **Policy** fact
+  line (LOB · status · renewal); (b) **Consent** chips + quiet-hours window;
+  (c) **Brief** — the conversation summary folded IN (2 sentences from
+  `conversationBrief()`, auto-refreshing on suggestion/message events) with a
+  small "Ask" affordance that opens the ConversationBrief **Inspector** for Q&A +
+  key moments (the sparkle button moved here from the thread header);
+  (d) **Memory** (atoms as quiet bullets, capped at 3 behind a "+N more" toggle
+  so the rail fits unscrolled at 1512×860); (e) **Agent asks** — the contact-
+  scoped asks for this contact from `agentAsks()` (ask + one-line why, quiet
+  accent left border); (f) a visually distinct **demo inset** ("{First}'s phone
+  · demo", darker surface + dashed hairline top) to play the customer and watch
+  the loop respond — STOP/START chips only; the request-document chips moved to
+  the composer ＋ menu.
+- **Composer ＋ menu** (r9): a small circular ＋ inside-left the composer opens an
+  upward popover (hairline card, shadow-float) — "Request a document ▸" (dec page
+  / driver's license / damage photos), "Send booking link", "Send payment link" —
+  each routing through `sendLink()`. Escape / outside-click closes; focus returns
+  to the input. Link-part outbounds render in the bubble as a **link-preview
+  card** (title + domain + link glyph), mirroring the provider's rich-link
+  unfurl. Blocked sends surface the GateReason honestly.
 
 #### Live thread (v3)
 
@@ -313,6 +336,26 @@ own. Takeover-as-a-separate-state is gone — it collapses into the toggle.
     texts after 6pm, sore about the rate increase), LOB gap, policy status.
     Never invented. The body sounds like the Hartley drafts: short, human, one
     question max, names Tom where natural.
+  - **Follow-up ladder (never re-pitch what we already sent).** The suggestion
+    engine evolves off the WHOLE conversation, including the agent's *own*
+    unanswered outbound (human sends count as the agent's too — see the toggle).
+    Rules:
+    - **HARD anti-repeat.** Never return a body that already appears —
+      normalized (trim + lowercase) — among the thread's own outbound sends.
+      Enforced by a **final check**, not just by construction: even a
+      correctly-built base message is dropped to `null` if it duplicates a send.
+      This kills the round-9 bug where approving a renewal draft re-suggested the
+      identical renewal text a third time.
+    - **Rung 1** — one unanswered outbound, **aged ≥ 1h** by the demo clock: a
+      **shorter, different-angle** nudge grounded in memory atoms (Dana → the
+      teenage-driver review agenda / an evening slot because "prefers texts after
+      6pm"), never the original pitch. `rationale[0]` names the ladder state
+      ("No reply to yesterday's text — trying a different angle").
+    - **Rung 2** — two unanswered outbounds: **`null` (wait)**. A third text is
+      what a good producer would not send.
+    - An unanswered outbound **< 1h** old: `null` (still fresh — unchanged rule).
+    - **A customer reply resets the ladder** to rung 0 (they hold the ball; the
+      base builder runs again).
 - **Agent toggle** (`setAgentEnabled(conversationId, enabled)`; `FeedEvent`
   `agent.toggled`). A day/night switch per conversation. **A human message never
   disables the agent** — it's just another outbound the agent knows about and
@@ -350,11 +393,16 @@ column on paper; the page breathes. Two states:
    footer row: suggestion pills left ("Show renewals", "Enroll win-back",
    "Campaign status", "Brief me on Dana") + a circular accent send button
    right. Focus ring per §4. This card is the centerpiece of the product.
-3. The **analytics band** (max-width 980px, centered, ~48px below): four stat
-   cards in a row — label (11px uppercase ink-2), **Fraunces ~30px value**,
-   12px sub. "Needs your eyes" links to Inbox (hover lift). **Recovered** =
-   value in --ok; it is the only colored number. Below the stat row, one wide
-   **Signals** card (the 2–3 derived signals with their quiet action links).
+3. The **"Today" briefing band** (r9; max-width 980px, centered, ~14–28px
+   below): ONE cohesive card from `homeBriefing()` — a 3-column grid (1fr each,
+   stacks ≤1100px): **Needs you** (approvals + asks, each a link with a Fraunces
+   count), **Overnight** (plain-English one-liners of what the agent did, with
+   the running-count + Recovered figure folded in compactly), **Worth a call**
+   (top-3 call-list names + one reason each, linking to /contacts). Under it a
+   slim strip of the top **agent asks** (tenant + contact mixed, max 2). The
+   pulse numbers live INSIDE the columns — **no separate stat band**. Every field
+   is derived from existing session state (no new hardcoded stats). At 720–860px
+   height the greeting/band spacing tightens so the surface holds one viewport.
 4. Footer line, tiny, ink-2, centered: "Deterministic router today — the
    language-model planner ships with the platform connection."
 
@@ -475,6 +523,35 @@ HttpClient maps provider-style endpoints and degrades gracefully):
   (`{ type:'media', filename, mime_type, size_bytes }`, mirroring the provider's
   media parts on `ThreadMessage.parts`). Offered doc types: declarations page,
   driver's license, photos of damage.
+- **Link sends** — `sendLink(conversationId, kind: 'booking' | 'payment' | 'document_request', docType?): Promise<{ ok; blockedReason? }>`.
+  The business sends a rich link the provider **natively unfurls** into a preview
+  card, so the outbound carries a `LinkPart` (`{ type:'link', url, title, domain }`)
+  on `ThreadMessage.parts` next to one short human sentence. Gated exactly like
+  `sendManual` (fail-closed: kill switch / opt-out / consent). **booking** →
+  `hartley.reloment.link/book`, title "Book with Tom Hartley — Renewal reviews"
+  (from `bookingConnection()`); **payment** → `hartley.reloment.link/pay`, title
+  "Pay your premium — Hartley Insurance" (demo domain — **no real payment
+  processor is named**); **document_request** delegates to `requestDocument`
+  (its own media-reply choreography). Emits `message.sent` + `suggestion.updated`.
+- **Agent asks** — `agentAsks(): Promise<AgentAsk[]>`
+  (`{ id, scope:'contact'|'tenant', contactId?, contactName?, ask, why }`). The
+  agent **reaches back to the business** with 3–5 deterministic asks recomputed
+  cheaply on read from the same fixture + session state (no new events): contact-
+  scoped ("Ask Dana for the home declarations page" — the bundle quote needs it;
+  "Confirm Marcus's coverage-limit answer with a licensed producer" — routed to a
+  human, waiting; "Have a producer call Ray back" — no text consent on file) and
+  tenant-scoped ("Add evening booking slots" — N contacts prefer texts after 6pm;
+  Voice-training when that connection is `action_needed`). Order is stable
+  (contact asks first, then tenant) so the briefing can take the top N. Never
+  invented — every `why` is grounded in real state.
+- **Home briefing** — `homeBriefing(): Promise<HomeBriefing>`
+  (`{ needsYou: { label; count; href }[]; overnight: string[]; callOut: { name; reason }[]; asks: AgentAsk[] }`).
+  Home becomes a **daily briefing**, composed from existing state — single
+  sources of truth, **no new hardcoded stats**: `needsYou` = approvals waiting
+  (→ `/inbox`, same count as the queue) + asks count; `overnight` = plain-English
+  one-liners of what the agent did (sent / held / blocked counts + missed calls
+  answered, counted from the audit log); `callOut` = the top 3 of `callList()`
+  each with one reason; `asks` = the top 3 of `agentAsks()`.
 - **Voice/tone profile** — `toneProfile(): Promise<ToneProfile>`. How the agents
   were tuned to the agency's voice: `trainedOn`, `traits`, and a generic-vs-tuned
   renewal-text `example`.

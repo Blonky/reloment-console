@@ -73,12 +73,14 @@ export function localTimeIn(timezone: string, now: number = Date.now()): string 
   }
 }
 
-/** Renewal date like "Aug 2" for the contact card. */
+/** Renewal date like "Jul 28" for the contact card. x_date is a date-only
+ * string parsed as UTC midnight — format in UTC too, or the local zone shifts
+ * it back a day (Jul 28 rendering as Jul 27). */
 export function shortDate(iso: string | null): string | null {
   if (iso === null) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 // ── Triage tag vocabulary ─────────────────────────────────────────────────────
