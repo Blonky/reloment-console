@@ -1,0 +1,20 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: 32px 24px;
+}
+
+.message {
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 42ch;
+  line-height: 1.5;
+}
+
+.action {
+  display: inline-flex;
+}

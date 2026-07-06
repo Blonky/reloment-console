@@ -1,0 +1,30 @@
+.row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.dotOk {
+  background: var(--ok);
+}
+.dotHold {
+  background: var(--hold);
+}
+.dotBlock {
+  background: var(--block);
+}
+.dotNeutral {
+  background: var(--ink-2);
+}
+
+.sentence {
+  font-size: 13px;
+  color: var(--ink);
+}

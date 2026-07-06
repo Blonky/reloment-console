@@ -1,0 +1,89 @@
+.sidebar {
+  width: var(--sidebar-w);
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--bg);
+  padding: 16px 12px;
+}
+
+.wordmark {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  padding: 4px 8px 16px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.link:hover {
+  background: var(--surface-2);
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.linkActive {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.linkActive:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.icon {
+  flex: none;
+}
+
+.footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 8px 4px;
+  border-top: 1px solid var(--line);
+}
+
+.tenant {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tenantName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tenantMeta {
+  font-size: 11px;
+  color: var(--ink-2);
+}

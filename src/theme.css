@@ -1,0 +1,157 @@
+/* Reloment Console — design tokens + base styles. The only global CSS.
+   Everything else is CSS Modules. Tokens are the binding contract (DESIGN.md §4). */
+
+@import '@fontsource-variable/inter';
+
+:root {
+  /* Surfaces */
+  --bg: #f6f5f1; /* warm paper app background */
+  --surface: #ffffff; /* cards */
+  --surface-2: #efede7; /* inset wells, code, timeline rails */
+
+  /* Ink */
+  --ink: #16191d; /* primary text */
+  --ink-2: #5a626b; /* secondary text */
+  --line: #e3e0d8; /* hairline borders (borders > shadows) */
+
+  /* Brand */
+  --accent: #0f5847; /* Reloment green — primary actions, active nav */
+  --accent-ink: #ffffff;
+  --accent-soft: #e9f1ee; /* selected/active backgrounds */
+
+  /* Governance tones */
+  --ok: #1d7a3e; /* allow / sent / positive */
+  --hold: #9a5b12; /* holds, pending, quiet-hours (amber, not alarmist) */
+  --block: #a8342a; /* blocks, opt-outs (used sparingly, never shouting) */
+  --info: #2456a6; /* informational */
+
+  /* Channels */
+  --imessage: #0b84fe;
+  --rcs: #0e7490;
+  --sms: #6b7280;
+
+  /* Soft tone backgrounds (derived, used for pills/chips) */
+  --ok-soft: #e7f2ea;
+  --hold-soft: #f6ecdc;
+  --block-soft: #f6e4e2;
+  --info-soft: #e6edf7;
+
+  /* Radii */
+  --radius: 10px;
+  --radius-sm: 6px;
+
+  /* Layout metrics */
+  --sidebar-w: 228px;
+  --topbar-h: 56px;
+  --content-max: 1160px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur: 140ms;
+
+  font-family: 'Inter Variable', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv05' 1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Headings use the display treatment sparingly; screens set sizes locally. */
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--ink);
+}
+
+/* Tabular numerals everywhere metrics appear. Utility for opt-in. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus-visible: 2px accent ring, never a browser default outline. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Skeleton shimmer — the only content-loading affordance (never spinners). */
+@keyframes reloment-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Reduced motion: kill the shimmer sweep and transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+::selection {
+  background: var(--accent-soft);
+}
