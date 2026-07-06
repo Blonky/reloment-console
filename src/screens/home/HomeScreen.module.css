@@ -1,35 +1,90 @@
 /* Home command channel — private styles. Tokens from theme.css only; hairline
    borders over shadows; 8px grid; 120–160ms ease-out motion. */
 
-/* Definite height (viewport minus topbar and the shell's 32px padding) so the
-   pulse row stays put and the transcript — not the page — is what scrolls. */
+/* Definite-height two-column cockpit: the channel (hero) owns the left column at
+   full height, the pulse rail sits to its right. Nothing but the channel
+   transcript and — if it must — the rail ever scrolls. The page itself is fixed
+   to the viewport (minus topbar and the shell's 32px padding). */
 .page {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 24px;
   height: calc(100vh - var(--topbar-h) - 64px);
   min-height: 0;
 }
 
-/* ── Pulse row ──────────────────────────────────────────────────────────── */
-.pulse {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr) 1.4fr;
-  gap: 16px;
-  align-items: start;
+/* ── Pulse rail ─────────────────────────────────────────────────────────── */
+/* A quiet column of four compact tiles + the Signals card. Scrolls itself if it
+   ever exceeds the page; never stretches the page. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
-@media (max-width: 1080px) {
-  .pulse {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
+/* Compact metric tile — fixed ~84px, equal height across the rail, row-oriented
+   so the value baseline lands in the same place on every tile. */
 .tileCard {
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-height: 84px;
+  padding: 14px 16px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+}
+
+.tileLink {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.tileLink:hover {
+  border-color: var(--ink-2);
+  text-decoration: none;
+}
+
+.tileLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tileValue {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.tileSub {
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Recovered — the one focal metric: ok-tone value + a restrained accent left
+   border. Everything else in the rail stays deliberately quiet. */
+.tileFocal {
+  border-left: 3px solid var(--accent);
+}
+
+.tileValueOk {
+  color: var(--ok);
 }
 
 /* Signals card body */
@@ -142,12 +197,27 @@
   color: var(--ink-2);
 }
 
-/* Transcript scroll region */
+/* Transcript scroll region — the flex-1 middle of the channel. min-height:0 lets
+   it shrink so the composer is never pushed off-card; it (not the page) scrolls
+   when the transcript overflows. */
 .transcript {
   flex: 1;
-  min-height: 340px;
+  min-height: 0;
   overflow-y: auto;
-  padding: 20px 16px 8px;
+  padding: 20px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  /* Paper interior (same treatment as the Inbox thread pane): the chat surface
+     reads as a distinct workspace and reply cards sit ON it instead of
+     dissolving into a white void. */
+  background: var(--bg);
+}
+
+/* Inner column carries the turns. margin-top:auto anchors short conversations to
+   the BOTTOM (against the composer, like a real messaging surface); once the
+   turns overflow, the auto margin collapses and .transcript scrolls normally. */
+.transcriptInner {
+  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -613,11 +683,20 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Welcome card ───────────────────────────────────────────────────────── */
+/* ── Welcome — the first system turn ────────────────────────────────────── */
+/* Reads as the opening message in a conversation, not a banner: a quiet inset
+   well anchored to the bottom of the transcript. No chips (they live on the
+   composer only). */
 .welcome {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
+  max-width: 560px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  border-top-left-radius: var(--radius-sm);
 }
 
 .welcomeLede {
@@ -629,12 +708,7 @@
 .welcomeHint {
   font-size: 12px;
   color: var(--ink-2);
-}
-
-.chipRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  line-height: 1.5;
 }
 
 /* ── Composer ───────────────────────────────────────────────────────────── */
@@ -692,4 +766,32 @@
 .errorLine {
   font-size: 13px;
   color: var(--block);
+}
+
+/* ── Stacked mode (< 1080px) ────────────────────────────────────────────── */
+/* One column: rail first (tiles become a 2×2 grid, signals below), channel
+   under it with a sensible min-height. The page goes auto-height and the
+   document may scroll — the only mode where that's acceptable. */
+@media (max-width: 1080px) {
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    min-height: calc(100vh - var(--topbar-h) - 64px);
+  }
+
+  .rail {
+    overflow-y: visible;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* Signals spans the full width beneath the 2×2 tiles. */
+  .rail > .signalsCard {
+    grid-column: 1 / -1;
+  }
+
+  .channel {
+    min-height: 520px;
+  }
 }

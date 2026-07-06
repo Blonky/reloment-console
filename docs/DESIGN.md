@@ -160,7 +160,7 @@ Dark mode: not in this milestone (do not half-ship it).
 
 ### Layout & texture
 
-- Left sidebar 228px (nav + tenant), Topbar 56px, content `max-width: 1160px`,
+- Left sidebar 228px (nav + tenant), Topbar 56px, content `max-width: 1360px`,
   page padding 32px, 8px spacing grid throughout.
 - Cards: `--surface`, 1px `--line` border, `--radius`, **no drop shadows**
   except overlays/popovers. Depth comes from the paper-vs-white contrast.
@@ -199,11 +199,23 @@ Three-pane: **triage list (300px) | thread (flex) | context rail (280px)**.
 
 ### Home (`/`) — the command channel
 
-The Manus-style orchestration surface. Two zones:
+The Manus-style orchestration surface. The command channel is the HERO and owns
+the composition; metrics support it from a rail. Layout: a full-height
+two-column grid — `minmax(0, 1fr)` for the channel, `300px` for the rail — with
+no dead vertical space anywhere:
 
-- **Pulse row** (top): four MetricTiles — Needs your eyes (links to Inbox),
-  Conversations running, Renewals next 30d, **Recovered** (money, display
-  type). Plus a Signals card (e.g. "2 win-back candidates aged past 90 days").
+- **Command channel** (left, full height): head bar, transcript, composer.
+  When the transcript is short its content anchors to the BOTTOM (against the
+  composer), like every real messaging surface — never a card floating at the
+  top of a void.
+- **Pulse rail** (right): four compact MetricTiles stacked (fixed ~84px, label
+  one line, value on a shared baseline) then the Signals card. **Recovered** is
+  the one focal accent (ok-tone value, hairline accent treatment); everything
+  else stays quiet. The rail scrolls itself if it must; it never stretches the
+  page.
+- Suggestion chips live on the composer ONLY — the welcome message is prose
+  (plus the "deterministic router today" honesty line), so nothing on screen is
+  duplicated.
 - **Command channel** (main): a chat column where the operator types intents.
   This milestone ships a **deterministic command router** (no LLM key needed):
   pattern-match intents → DataClient tool calls → rich structured replies

@@ -1,11 +1,12 @@
 // Home — the command channel. "Command a governed fleet in plain language."
 //
-// Two zones (DESIGN.md §5): a pulse row (four tiles + derived signals) and the
-// command channel (transcript + composer). The channel routes plain-language
-// intents through a deterministic parser (parseIntent) to governed DataClient
-// tool calls, rendering each result as a card in the transcript. After enroll
-// and kill-switch actions the pulse refetches live — the pulse reacting to a
-// command is the demo moment.
+// A full-height two-column cockpit (DESIGN.md §5): the command channel is the
+// hero (left, full height — head / transcript / composer), and a quiet pulse
+// rail sits to its right (four compact tiles + derived signals). The channel
+// routes plain-language intents through a deterministic parser (parseIntent) to
+// governed DataClient tool calls, rendering each result as a card in the
+// transcript. After enroll and kill-switch actions the pulse refetches live —
+// the pulse reacting to a command is the demo moment.
 
 import {
   useCallback,
@@ -19,7 +20,7 @@ import { useData } from '../../data/useData.ts';
 import type { Contact } from '../../data/types.ts';
 import { Button } from '../../components/index.ts';
 import styles from './HomeScreen.module.css';
-import { parseIntent, COMMAND_CATALOGUE } from './parseIntent.ts';
+import { parseIntent } from './parseIntent.ts';
 import type { Intent } from './parseIntent.ts';
 import {
   BookCard,
@@ -266,17 +267,7 @@ export default function HomeScreen() {
 
   return (
     <div className={styles.page}>
-      {/* Pulse row */}
-      <div className={styles.pulse}>
-        <PulseTiles pulse={pulse.data} />
-        <SignalsCard
-          signals={signals}
-          loading={book.loading}
-          onRun={(cmd) => void submit(cmd)}
-        />
-      </div>
-
-      {/* Command channel */}
+      {/* Command channel — the hero, full-height left column */}
       <section className={styles.channel} aria-label="Command channel">
         <div className={styles.channelHead}>
           <span className={styles.channelTitle}>
@@ -300,6 +291,7 @@ export default function HomeScreen() {
           aria-live="polite"
           aria-label="Command transcript"
         >
+          <div className={styles.transcriptInner}>
           {turns.map((t) => {
             if (t.role === 'user') {
               return (
@@ -325,37 +317,18 @@ export default function HomeScreen() {
             if (t.role === 'welcome') {
               return (
                 <div className={`${styles.turn} ${styles.turnSystem}`} key={t.id}>
-                  <div className={styles.systemWrap}>
-                    <div className={styles.reply}>
-                      <div className={styles.replyBody}>
-                        <div className={styles.welcome}>
-                          <p className={styles.welcomeLede}>
-                            This is your command channel. Tell the fleet what to do
-                            in plain language — pull the book, enroll a campaign,
-                            brief yourself on a contact, or pause everything. Every
-                            action runs through the same governed send gate, and
-                            the replies show you exactly what it did — including who
-                            it excluded, and why.
-                          </p>
-                          <div className={styles.chipRow}>
-                            {COMMAND_CATALOGUE.slice(0, 5).map((c) => (
-                              <button
-                                type="button"
-                                className={styles.chip}
-                                key={c.label}
-                                onClick={() => void submit(c.example)}
-                              >
-                                {c.example}
-                              </button>
-                            ))}
-                          </div>
-                          <p className={styles.welcomeHint}>
-                            Deterministic router today — the language-model planner
-                            ships with the platform connection.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                  <div className={styles.welcome}>
+                    <p className={styles.welcomeLede}>
+                      This is your command channel. Tell the fleet what to do in
+                      plain language — pull the book, enroll a campaign, brief
+                      yourself on a contact, or pause everything. Every action runs
+                      through the same governed send gate, and the reply shows you
+                      exactly what it did, including who it excluded and why.
+                    </p>
+                    <p className={styles.welcomeHint}>
+                      Deterministic router today — the language-model planner ships
+                      with the platform connection.
+                    </p>
                   </div>
                 </div>
               );
@@ -367,6 +340,7 @@ export default function HomeScreen() {
               </div>
             );
           })}
+          </div>
         </div>
 
         {/* Composer */}
@@ -417,6 +391,16 @@ export default function HomeScreen() {
           </div>
         </div>
       </section>
+
+      {/* Pulse rail — quiet metrics + derived signals, right column */}
+      <aside className={styles.rail} aria-label="Pulse">
+        <PulseTiles pulse={pulse.data} />
+        <SignalsCard
+          signals={signals}
+          loading={book.loading}
+          onRun={(cmd) => void submit(cmd)}
+        />
+      </aside>
     </div>
   );
 }

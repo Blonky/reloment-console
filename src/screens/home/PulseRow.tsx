@@ -6,7 +6,8 @@
 // command channel uses — never invented. Each carries a quiet action that
 // dispatches the corresponding command into the channel.
 
-import { MetricTile, Card, Skeleton } from '../../components/index.ts';
+import { Link } from 'react-router-dom';
+import { Card, Skeleton } from '../../components/index.ts';
 import type { BookRow, Contact, HomePulse } from '../../data/types.ts';
 import styles from './HomeScreen.module.css';
 
@@ -74,6 +75,46 @@ export function deriveSignals(contacts: Contact[], lapsed: BookRow[]): Signal[] 
   return out.slice(0, 3);
 }
 
+// A compact rail tile — fixed ~84px, row of label / value / sub with the value
+// on a shared baseline across the rail. `to` makes the whole tile a hover-well
+// link; `focal` applies the one accent treatment (used by Recovered only).
+function Tile({
+  label,
+  value,
+  sub,
+  to,
+  focal,
+  valueOk,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  to?: string;
+  focal?: boolean;
+  valueOk?: boolean;
+}) {
+  const cls = `${styles.tileCard}${focal ? ` ${styles.tileFocal}` : ''}`;
+  const inner = (
+    <>
+      <span className={styles.tileLabel}>{label}</span>
+      <span
+        className={`${styles.tileValue}${valueOk ? ` ${styles.tileValueOk}` : ''}`}
+      >
+        {value}
+      </span>
+      <span className={styles.tileSub}>{sub}</span>
+    </>
+  );
+  if (to !== undefined) {
+    return (
+      <Link to={to} className={`${cls} ${styles.tileLink}`}>
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={cls}>{inner}</div>;
+}
+
 export function PulseTiles({ pulse }: { pulse: HomePulse | undefined }) {
   if (!pulse) {
     return (
@@ -81,7 +122,7 @@ export function PulseTiles({ pulse }: { pulse: HomePulse | undefined }) {
         {[0, 1, 2, 3].map((i) => (
           <div className={styles.tileCard} key={i}>
             <Skeleton width={80} height={11} />
-            <div style={{ height: 10 }} />
+            <div style={{ height: 6 }} />
             <Skeleton width={56} height={26} />
           </div>
         ))}
@@ -90,36 +131,29 @@ export function PulseTiles({ pulse }: { pulse: HomePulse | undefined }) {
   }
   return (
     <>
-      <div className={styles.tileCard}>
-        <MetricTile
-          label="Needs your eyes"
-          value={String(pulse.needsYourEyes)}
-          sub="drafts & routed threads"
-          to="/inbox"
-        />
-      </div>
-      <div className={styles.tileCard}>
-        <MetricTile
-          label="Conversations running"
-          value={String(pulse.conversationsRunning)}
-          sub="active threads"
-        />
-      </div>
-      <div className={styles.tileCard}>
-        <MetricTile
-          label="Renewals next 30d"
-          value={String(pulse.renewalsNext30d)}
-          sub="up for renewal"
-        />
-      </div>
-      <div className={styles.tileCard}>
-        <MetricTile
-          label="Recovered"
-          value={dollars(pulse.wonBackCents)}
-          sub="causally attributed"
-          tone="ok"
-        />
-      </div>
+      <Tile
+        label="Needs your eyes"
+        value={String(pulse.needsYourEyes)}
+        sub="drafts & routed threads"
+        to="/inbox"
+      />
+      <Tile
+        label="Conversations running"
+        value={String(pulse.conversationsRunning)}
+        sub="active threads"
+      />
+      <Tile
+        label="Renewals next 30d"
+        value={String(pulse.renewalsNext30d)}
+        sub="up for renewal"
+      />
+      <Tile
+        label="Recovered"
+        value={dollars(pulse.wonBackCents)}
+        sub="causally attributed"
+        focal
+        valueOk
+      />
     </>
   );
 }
@@ -134,7 +168,7 @@ export function SignalsCard({
   onRun: (command: string) => void;
 }) {
   return (
-    <Card title="Signals">
+    <Card title="Signals" className={styles.signalsCard}>
       {loading ? (
         <div className={styles.signals}>
           <Skeleton height={14} />
