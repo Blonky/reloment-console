@@ -1,6 +1,7 @@
 import { useCallback, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from '../components/index.ts';
+import { LINE_DISPLAY } from '../data/fixtures.ts';
 import { useClient } from './ClientContext.tsx';
 import { useLiveData } from './LiveData.tsx';
 import styles from './Sidebar.module.css';
@@ -225,7 +226,7 @@ export function TenantCard() {
         <Avatar name={TENANT} size="sm" />
         <div className={styles.tenantText}>
           <span className={styles.tenantName}>{TENANT}</span>
-          <span className={styles.tenantMeta}>Demo tenant</span>
+          <span className={`${styles.tenantMeta} tnum`}>{LINE_DISPLAY}</span>
         </div>
       </div>
     </div>

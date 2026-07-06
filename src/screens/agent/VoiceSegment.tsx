@@ -119,9 +119,24 @@ function TraitChip({
   );
 }
 
+// Strip em/en dashes from a would-be text-message body, restructuring to natural
+// punctuation — the voice canon: em dashes read as machine-written (DESIGN.md §6).
+// Applied to the derived sample so what the customer would receive is honest to
+// the rule the rest of the agent's sends follow.
+function stripDashes(body: string): string {
+  return body
+    .replace(/\s*—\s*/g, ', ')
+    .replace(/\s*–\s*/g, ', ')
+    .replace(/,\s*,/g, ',');
+}
+
 export default function VoiceSegment() {
   const client = useClient();
   const voice = useData(() => client.agentVoice(), [client]);
+  // The Voice-training connection status — read from the same catalog Settings
+  // shows, so the "Voice source" row states the TRUTH (trained vs not) rather than
+  // presenting a fixture claim as fact on the identity card.
+  const catalog = useData(() => client.connectionsCatalog(), [client]);
 
   // Local working copy so typing feels instant; the store is the source of truth
   // and we resync from it whenever a fresh read lands.
@@ -167,6 +182,27 @@ export default function VoiceSegment() {
 
   const traits = data.traits;
 
+  // Voice source — the training connection's status, framed honestly. Connected →
+  // show its detail ("Trained on 412 conversations…", true as a connection status);
+  // not connected → the honest fallback (the agent uses house style + knowledge).
+  const voiceConn = catalog.data?.connected.find((c) => c.key === 'voice');
+  const voiceTrained = voiceConn?.status === 'connected';
+  const voiceSourceText =
+    voiceConn === undefined
+      ? undefined
+      : voiceTrained
+        ? voiceConn.detail
+        : 'Not trained yet — the agent uses your house style and knowledge only.';
+
+  // The sample the agent would send — DERIVED from the stored tuned example, with
+  // em dashes stripped (§6) so it obeys the same rule as real sends. It reflects
+  // the current voice, and updates as training deepens (note below). This is not
+  // an uneditable factual claim: it is a live sample, honestly labelled.
+  const sampleBody = stripDashes(voiceExampleTuned);
+  // If the house-style instructions carry recognizable directives, note that the
+  // sample tracks the voice as it is tuned (kept honest + simple).
+  const hasDirectives = instructions.trim().length > 0;
+
   const commitName = () => {
     const trimmed = name.trim();
     if (trimmed && trimmed !== data.name) persist({ name: trimmed });
@@ -191,6 +227,22 @@ export default function VoiceSegment() {
 
   return (
     <div className={styles.card}>
+      {/* Voice source — a quiet status row (NOT an editable field). Reads the
+          Voice-training connection so the "trained on…" claim lives where it's
+          honest: as a connection status, not a fixed fact on the identity card. */}
+      {voiceSourceText !== undefined && (
+        <div className={styles.sourceRow}>
+          <span
+            className={`${styles.sourceDot} ${voiceTrained ? '' : styles.sourceDotOff}`}
+            aria-hidden="true"
+          />
+          <div className={styles.sourceText}>
+            <span className={styles.sourceLabel}>Voice source</span>
+            <span className={styles.sourceValue}>{voiceSourceText}</span>
+          </div>
+        </div>
+      )}
+
       {/* Name — an inline input styled as the display heading. */}
       <div className={styles.field}>
         <label className={styles.fieldLabel} htmlFor="agent-name">
@@ -254,18 +306,25 @@ export default function VoiceSegment() {
         />
       </div>
 
-      {/* Before/after — the tuned side reads "Your agent" and reflects live edits
-          (name + traits derive from the store). */}
+      {/* Before/after — the right column is a LIVE sample of what your agent would
+          send, derived from the voice store (em dashes stripped per §6). Not a
+          fixed claim: it tracks the voice, and the note says so once you've added
+          house-style instructions. */}
       <div className={styles.compare}>
         <div className={styles.sample}>
           <span className={styles.sampleLabel}>A generic bot says</span>
           <p className={`${styles.sampleText} ${styles.sampleGeneric}`}>{voiceExampleGeneric}</p>
         </div>
         <div className={`${styles.sample} ${styles.sampleTuned}`}>
-          <span className={`${styles.sampleLabel} ${styles.sampleLabelTuned}`}>Your agent</span>
-          <p className={styles.sampleText}>{voiceExampleTuned}</p>
+          <span className={`${styles.sampleLabel} ${styles.sampleLabelTuned}`}>
+            Your agent · sample
+          </span>
+          <p className={styles.sampleText}>{sampleBody}</p>
         </div>
       </div>
+      {hasDirectives && (
+        <p className={styles.sampleNote}>Sample updates as your voice training deepens.</p>
+      )}
 
       {/* The quiet autosave wisp. aria-live so it's announced without stealing focus. */}
       <span className={`${styles.wisp} ${saved ? styles.wispOn : ''}`} aria-live="polite">

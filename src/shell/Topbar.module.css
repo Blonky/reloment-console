@@ -93,45 +93,6 @@
   flex: none;
 }
 
-/* ⌘K hint pill — a subtle white pill that lifts on hover; opens the palette. */
-.paletteHint {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 4px 8px;
-  background: var(--surface);
-  border: none;
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-soft);
-  color: var(--ink-2);
-  cursor: pointer;
-  transition:
-    box-shadow var(--dur) var(--ease),
-    transform var(--dur) var(--ease),
-    color var(--dur) var(--ease);
-}
-
-.paletteHint:hover {
-  box-shadow: var(--shadow-float);
-  transform: translateY(-1px);
-  color: var(--ink);
-}
-
-.paletteKbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 5px;
-  background: var(--surface-2);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  color: inherit;
-}
-
 /* Paused (kill-switch on) band — unchanged red band behavior. */
 .paused {
   background: var(--block);
@@ -196,8 +157,10 @@
     font-size: 14px;
   }
 
-  /* Drop the ⌘K hint on phones (no physical keyboard); keep demo + status. */
-  .paletteHint {
+  /* The "Demo data" chip + the "Sending active" status pill move into the nav
+     drawer footer on phones — only the notifications bell stays in the topbar, so
+     the header holds one clean row (hamburger · wordmark · spacer · bell). */
+  .mobileHidden {
     display: none;
   }
 

@@ -62,7 +62,7 @@ import {
   HOME_PULSE,
   LICENSED_AGENT,
   LINE_AGENTS,
-  LINE_E164,
+  LINE_DISPLAY,
   OUTCOMES,
   PLAYBOOK_HISTORY,
   PLAYBOOKS,
@@ -128,13 +128,13 @@ const AVAILABLE_CONNECTIONS: { key: string; name: string; blurb: string }[] = [
   {
     key: 'salesforce',
     name: 'Salesforce',
-    blurb: 'Conversation pane on Lead, Contact & Account + Flow send actions',
+    blurb: 'Text customers from Lead, Contact and Account records',
   },
-  { key: 'hubspot', name: 'HubSpot', blurb: 'Contact sidebar sends + workflow actions' },
-  { key: 'slack', name: 'Slack', blurb: 'Reply triage in your channels' },
-  { key: 'nowcerts', name: 'NowCerts', blurb: 'Book of record sync' },
-  { key: 'hawksoft', name: 'HawkSoft', blurb: 'Book of record sync' },
-  { key: 'custom', name: 'Custom', blurb: 'Bring your own MCP or API' },
+  { key: 'hubspot', name: 'HubSpot', blurb: 'Text from contact records and workflows' },
+  { key: 'slack', name: 'Slack', blurb: 'Customer replies land in your Slack channels for the team' },
+  { key: 'nowcerts', name: 'NowCerts', blurb: 'Keeps policies, renewals and LOBs synced automatically' },
+  { key: 'hawksoft', name: 'HawkSoft', blurb: 'Keeps policies, renewals and LOBs synced automatically' },
+  { key: 'custom', name: 'Custom', blurb: 'Bring your own MCP or API and we wire it in' },
 ];
 
 // ── Agent brain (r13) persistence ───────────────────────────────────────────
@@ -755,7 +755,7 @@ export class DemoClient implements DataClient {
         const channel = pickChannel(contactId);
         const sent = this.appendSent(
           t!,
-          "Hey — sorry we missed you! This is Hartley Insurance's text line. What can we help with?",
+          "Hey, sorry we missed you! This is Hartley Insurance's text line. What can we help with?",
           channel,
         );
         this.appendAudit('missed_call_agent', 'message.sent', `auto_ack channel:${channel}`);
@@ -884,18 +884,18 @@ export class DemoClient implements DataClient {
         ? {
             type: 'link',
             url: 'https://hartley.reloment.link/book',
-            title: `Book with ${LICENSED_AGENT} — Renewal reviews`,
+            title: `Book with ${LICENSED_AGENT} · Renewal reviews`,
             domain: 'hartley.reloment.link',
           }
         : {
             type: 'link',
             url: 'https://hartley.reloment.link/pay',
-            title: 'Pay your premium — Hartley Insurance',
+            title: 'Pay your premium · Hartley Insurance',
             domain: 'hartley.reloment.link',
           };
     const body =
       kind === 'booking'
-        ? `Here’s a link to grab time with Tom, ${first} — pick whatever works for you.`
+        ? `Here’s a link to grab time with Tom, ${first}. Pick whatever works for you.`
         : `Here’s a secure link to take care of your premium whenever you’re ready, ${first}.`;
     void cal;
 
@@ -1631,7 +1631,9 @@ export class DemoClient implements DataClient {
     ];
     return delay({
       name: voice.name,
-      line: LINE_E164,
+      // Human-formatted, derived from LINE_E164 — the same string Settings and
+      // the tenant card show, so the line never renders as two numbers.
+      line: LINE_DISPLAY,
       trainedOn: TONE_PROFILE.trainedOn,
       traits: [...voice.traits],
       example: { generic: TONE_PROFILE.example.generic, tuned: TONE_PROFILE.example.tuned },
@@ -1758,7 +1760,7 @@ export class DemoClient implements DataClient {
         name: 'Messaging line',
         status: 'connected',
         powers: 'The number every text sends and receives on.',
-        detail: '+1 (512) 555-0140 · texts send as Hartley Insurance',
+        detail: `${LINE_DISPLAY} · texts send as Hartley Insurance`,
       },
       {
         key: 'call_capture',
@@ -2091,7 +2093,7 @@ export class DemoClient implements DataClient {
       if (afterSix) rationale.push('Prefers texts after 6pm');
       if (hasMem('teenage driver')) rationale.push('Teenage driver starting this fall');
       const timeHint = afterSix ? 'this evening' : 'this week';
-      body = `Hey ${first} — your ${c.lob ?? 'policy'} renews ${this.friendlyDate(
+      body = `Hey ${first}, your ${c.lob ?? 'policy'} renews ${this.friendlyDate(
         c.xDateDays!,
       )}. Tom kept time open to go over your options first. Want to grab 15 minutes ${timeHint}?`;
     } else if (lapsed && customerWaiting && /quote|number|refresh|deciding|still/.test(inboundText)) {
@@ -2100,14 +2102,14 @@ export class DemoClient implements DataClient {
       playbookLabel = 'Win back lapsed quotes';
       rationale.push('Quote lapsed — customer still deciding');
       rationale.push(`Their last reply: “${this.trim(lastInbound!.body, 48)}”`);
-      body = `No rush ${first} — want me to have Tom refresh those numbers so you're seeing the latest? Happy to hold your prior quote while you decide.`;
+      body = `No rush ${first}. Want me to have Tom refresh those numbers so you're seeing the latest? Happy to hold your prior quote while you decide.`;
     } else if (lapsed) {
       // A cold lapsed quote we can reactivate (marketing consent required to send;
       // the gate enforces it — we suggest honestly and let the gate decide).
       playbookLabel = 'Win back lapsed quotes';
       rationale.push('Quote lapsed — reactivation candidate');
       if (!scopes.has('marketing')) rationale.push('No marketing consent — gate will hold');
-      body = `Hey ${first} — that quote from earlier this year is about to expire. Rates have moved since, so it's worth a fresh look. Want Tom to pull updated numbers?`;
+      body = `Hey ${first}, that quote from earlier this year is about to expire. Rates have moved since, so it's worth a fresh look. Want Tom to pull updated numbers?`;
     } else if (c.status === 'new_lead') {
       // A new lead who reached out — speed-to-lead follow-up. If they asked a
       // coverage question we keep it non-advisory (Tom answers the specifics).
@@ -2115,9 +2117,9 @@ export class DemoClient implements DataClient {
       rationale.push('New lead — reached out about a quote');
       if (/liability|coverage|limit/.test(inboundText)) {
         rationale.push('Asked about coverage limits — Tom to advise');
-        body = `Hey ${first} — good question on the limits. Tom can walk you through what fits your situation. Want a quick call this week to lock in your numbers?`;
+        body = `Hey ${first}, good question on the limits. Tom can walk you through what fits your situation. Want a quick call this week to lock in your numbers?`;
       } else {
-        body = `Hey ${first} — thanks for reaching out about a quote! I can pull your numbers together today. What's a good time for a quick call?`;
+        body = `Hey ${first}, thanks for reaching out about a quote! I can pull your numbers together today. What's a good time for a quick call?`;
       }
       if (autoOnly) rationale.push('Auto only — bundle candidate');
     } else if (autoOnly) {
@@ -2126,7 +2128,7 @@ export class DemoClient implements DataClient {
       playbookLabel = 'Bundle upsell';
       rationale.push('Auto only — bundle candidate');
       if (!scopes.has('marketing')) rationale.push('No marketing consent — gate will hold');
-      body = `Hey ${first} — you're with us on auto already. Bundling your home policy usually trims both premiums. Want Tom to run the combined number?`;
+      body = `Hey ${first}, you're with us on auto already. Bundling your home policy usually trims both premiums. Want Tom to run the combined number?`;
     } else {
       // Nothing actionable stands out — silence beats a filler text.
       return delay(null);
@@ -2188,7 +2190,7 @@ export class DemoClient implements DataClient {
         rationale.push('Teenage driver starting this fall');
         const when = afterSix ? 'after 6' : 'this week';
         return {
-          body: `No rush ${first} — with a teenage driver joining this fall it’s worth a quick look before renewal. Even 10 minutes ${when} works.`,
+          body: `No rush ${first}. With a teenage driver joining this fall it’s worth a quick look before renewal, even 10 minutes ${when} works.`,
           playbookLabel: 'Renewal reminder',
           rationale,
         };
@@ -2196,13 +2198,13 @@ export class DemoClient implements DataClient {
       if (afterSix) {
         rationale.push('Prefers texts after 6pm');
         return {
-          body: `No rush ${first} — I can grab Tom an evening slot after 6 if that’s easier. Just say the word.`,
+          body: `No rush ${first}. I can grab Tom an evening slot after 6 if that’s easier. Just say the word.`,
           playbookLabel: 'Renewal reminder',
           rationale,
         };
       }
       return {
-        body: `No rush ${first} — happy to work around your schedule for the renewal review. When’s good?`,
+        body: `No rush ${first}. Happy to work around your schedule for the renewal review. When’s good?`,
         playbookLabel: 'Renewal reminder',
         rationale,
       };
@@ -2210,7 +2212,7 @@ export class DemoClient implements DataClient {
 
     if (c.status === 'lapsed_quote') {
       return {
-        body: `No pressure ${first} — the door’s open if you want fresh numbers before that quote expires. Just say the word.`,
+        body: `No pressure ${first}. The door’s open if you want fresh numbers before that quote expires. Just say the word.`,
         playbookLabel: 'Win back lapsed quotes',
         rationale: ['No reply to our note — trying a lighter, different angle', 'Quote lapsed — reactivation candidate'],
       };
@@ -2218,7 +2220,7 @@ export class DemoClient implements DataClient {
 
     if (c.status === 'new_lead') {
       return {
-        body: `No rush ${first} — whenever you’ve got two minutes I can still pull those numbers together. Happy to work around you.`,
+        body: `No rush ${first}. Whenever you’ve got two minutes I can still pull those numbers together. Happy to work around you.`,
         playbookLabel: 'Speed to lead',
         rationale: ['No reply to the first note — trying a different angle', 'New lead — reached out about a quote'],
       };
@@ -2250,9 +2252,10 @@ export class DemoClient implements DataClient {
   ): { body: string; playbookLabel: string; rationale: string[] } | null {
     const rationale: string[] = [this.steerRationale(steer.goal)];
     // A note like "mention the bundle discount" gets its own quiet rationale line
-    // and a natural clause woven into the body (offset with an em-dash so it reads
-    // cleanly wherever it lands, before the closing question).
-    const noteClause = steer.note ? ` — and I can ${this.lowerFirst(steer.note)}` : '';
+    // and a natural clause woven into the body (offset with a comma so it reads
+    // cleanly wherever it lands, before the closing question). No em dashes in a
+    // customer-received body (the voice canon — they read as machine-written).
+    const noteClause = steer.note ? `, and I can ${this.lowerFirst(steer.note)}` : '';
     if (steer.note) rationale.push(`Your note: “${this.trim(steer.note, 40)}”`);
 
     const afterSix = hasMem('after 6pm') || hasMem('evening');
@@ -2263,7 +2266,7 @@ export class DemoClient implements DataClient {
       if (afterSix) rationale.push('Prefers texts after 6pm');
       rationale.push(`Booking: ${BOOKING_CONNECTION.calendar}`);
       const slot = afterSix ? 'Thursday at 6:30' : 'Thursday at 2';
-      const body = `Hey ${first} — want me to lock in a time with Tom? ${slot} is open if that works${noteClause}.`;
+      const body = `Hey ${first}, want me to lock in a time with Tom? ${slot} is open if that works${noteClause}.`;
       return { body, playbookLabel: 'Book a time', rationale: rationale.slice(0, 3) };
     }
 
@@ -2273,7 +2276,7 @@ export class DemoClient implements DataClient {
         ? `since your renewal lands ${this.friendlyDate(c.xDateDays!)}`
         : 'whenever it’s convenient';
       if (renewsSoon) rationale.push(`Renews ${this.friendlyDate(c.xDateDays!)} (${c.xDateDays} days)`);
-      const body = `Hey ${first} — I can text you a secure link to take care of the premium ${context}${noteClause}. Want me to send it over?`;
+      const body = `Hey ${first}, I can text you a secure link to take care of the premium ${context}${noteClause}. Want me to send it over?`;
       return { body, playbookLabel: 'Take payment', rationale: rationale.slice(0, 3) };
     }
 
@@ -2283,18 +2286,18 @@ export class DemoClient implements DataClient {
       // otherwise the general "what we're missing" — the coverage they want quoted.
       if (c.lob === 'Auto+Home' && renewsSoon) {
         rationale.push('Bundle quote needs the current dec page');
-        const body = `Hey ${first} — to quote the auto+home bundle at renewal I just need your current home declarations page${noteClause}. Could you send it over when you get a sec?`;
+        const body = `Hey ${first}, to quote the auto+home bundle at renewal I just need your current home declarations page${noteClause}. Could you send it over when you get a sec?`;
         return { body, playbookLabel: 'Collect info', rationale: rationale.slice(0, 3) };
       }
       rationale.push('Missing the details to quote accurately');
-      const body = `Hey ${first} — to get your numbers exactly right I just need a couple quick details on your coverage${noteClause}. Mind if I grab those?`;
+      const body = `Hey ${first}, to get your numbers exactly right I just need a couple quick details on your coverage${noteClause}. Mind if I grab those?`;
       return { body, playbookLabel: 'Collect info', rationale: rationale.slice(0, 3) };
     }
 
     // request_document — mirrors the document ask (a phone pic is fine).
     const docType = c.lob === 'Auto+Home' || c.lob === 'Home' ? 'home declarations page' : 'driver’s license';
     rationale.push(`Needs the ${docType}`);
-    const body = `Hey ${first} — could you text over a quick photo of your ${docType}? A phone pic works great${noteClause}.`;
+    const body = `Hey ${first}, could you text over a quick photo of your ${docType}? A phone pic works great${noteClause}.`;
     return { body, playbookLabel: 'Request a document', rationale: rationale.slice(0, 3) };
   }
 

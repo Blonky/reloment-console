@@ -35,6 +35,14 @@ function tsMin(deltaMin: number): string {
 
 export const TENANT_NAME = 'Hartley Insurance Group';
 export const LINE_E164 = '+15125550100';
+// Human-formatted messaging line — DERIVED from LINE_E164 so the two can never
+// disagree (a prior hardcoded '0140' drifted from the canonical '0100').
+// Rendered in the Settings Messaging-line row, the tenant card subtitle, and
+// the Agent identity line.
+export const LINE_DISPLAY = LINE_E164.replace(
+  /^\+1(\d{3})(\d{3})(\d{4})$/,
+  '+1 ($1) $2-$3',
+);
 export const LICENSED_AGENT = 'Tom Hartley';
 
 // ── Contacts (seed.ts CONTACTS, verbatim scenarios) ─────────────────────────
@@ -245,7 +253,7 @@ const danaThread: FixtureThread = {
     msg('inbound', 'Hey is my policy going up again this year??', -95),
     msg(
       'outbound',
-      'Hey Dana — I hear you. Your auto+home renews Jul 28, and Tom kept time open to walk through your options before anything changes. Want Thursday at 5:30, after work?',
+      'Hey Dana, I hear you. Your auto+home renews Jul 28, and Tom kept time open to walk through your options before anything changes. Want Thursday at 5:30, after work?',
       -90,
       { status: 'awaiting_approval', channel: null, cls: 'transactional' },
     ),
@@ -277,7 +285,7 @@ const priyaThread: FixtureThread = {
   messages: [
     msg(
       'outbound',
-      'Hey Priya — your home quote from June is about to expire. Want me to have Tom refresh the numbers?',
+      'Hey Priya, your home quote from June is about to expire. Want me to have Tom refresh the numbers?',
       -1450,
       { channel: 'imessage' },
     ),
@@ -292,14 +300,14 @@ const jordanThread: FixtureThread = {
   messages: [
     msg(
       'outbound',
-      'Hey Jordan — noticed your auto policy lapsed last month. If it was just timing, Tom found a way to hold onto your old rate.',
+      'Hey Jordan, noticed your auto policy lapsed last month. If it was just timing, Tom found a way to hold onto your old rate.',
       -8700,
       { channel: 'sms' },
     ),
     msg('inbound', 'ok yeah let’s do it 🙌', -8680),
     msg(
       'outbound',
-      'You’re in — renewal confirmed at your prior rate. Tom will call to finalize.',
+      'You’re in. Renewal confirmed at your prior rate, and Tom will call to finalize.',
       -8670,
       { channel: 'sms' },
     ),
@@ -340,7 +348,7 @@ export const PLAYBOOKS: FixturePlaybook[] = [
     classification: 'transactional',
     status: 'active',
     template:
-      'Hey {first_name} — your policy comes up for renewal soon. Tom kept some time open to walk through your options before anything changes. Want to grab 15 minutes this week?',
+      'Hey {first_name}, your policy comes up for renewal soon. Tom kept some time open to walk through your options before anything changes. Want to grab 15 minutes this week?',
     counselSigned: true,
   },
   {
@@ -349,7 +357,7 @@ export const PLAYBOOKS: FixturePlaybook[] = [
     classification: 'transactional',
     status: 'active',
     template:
-      'Hey {first_name} — thanks for reaching out about a quote! I can get your numbers together today. When’s a good time for a quick call?',
+      'Hey {first_name}, thanks for reaching out about a quote! I can get your numbers together today. When’s a good time for a quick call?',
     counselSigned: true,
   },
   {
@@ -358,7 +366,7 @@ export const PLAYBOOKS: FixturePlaybook[] = [
     classification: 'marketing',
     status: 'active',
     template:
-      'Hey {first_name} — that quote from earlier this year is about to expire. Rates have moved since, so it’s worth a fresh look. Want me to pull updated numbers?',
+      'Hey {first_name}, that quote from earlier this year is about to expire. Rates have moved since, so it’s worth a fresh look. Want me to pull updated numbers?',
     counselSigned: true,
     autonomy: 'draft',
     description:
@@ -370,7 +378,7 @@ export const PLAYBOOKS: FixturePlaybook[] = [
     classification: 'transactional',
     status: 'active',
     template:
-      'Hey — sorry we missed you! This is Hartley Insurance’s text line. What can we help with?',
+      'Hey, sorry we missed you! This is Hartley Insurance’s text line. What can we help with?',
     counselSigned: true,
     trigger: 'call.missed',
     autonomy: 'auto_send_ack',
@@ -383,7 +391,7 @@ export const PLAYBOOKS: FixturePlaybook[] = [
     classification: 'marketing',
     status: 'active',
     template:
-      'Hey {first_name} — you’re with us on auto already. Bundling your home policy usually trims both premiums. Want Tom to run the combined number?',
+      'Hey {first_name}, you’re with us on auto already. Bundling your home policy usually trims both premiums. Want Tom to run the combined number?',
     counselSigned: true,
     autonomy: 'draft',
     description:
@@ -537,7 +545,7 @@ export const TONE_PROFILE = {
     generic:
       'Dear valued customer, your policy is approaching its renewal date. Please contact our office at your earliest convenience to discuss your coverage options and any applicable rate adjustments.',
     tuned:
-      'Hey Dana — I hear you. Your auto+home renews Jul 28, and Tom kept time open to walk through your options first. Want Thursday at 5:30, after work?',
+      'Hey Dana, I hear you. Your auto+home renews Jul 28, and Tom kept time open to walk through your options first. Want Thursday at 5:30, after work?',
   },
 } as const;
 

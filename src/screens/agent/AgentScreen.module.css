@@ -165,56 +165,6 @@
   white-space: nowrap;
 }
 
-.trainedOn {
-  font-size: 13px;
-  color: var(--ink-2);
-}
-
-/* Before/after voice example — a compact two-column. */
-.voiceCompare {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.voiceSample {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 11px 13px;
-}
-
-.voiceTuned {
-  background: var(--accent-soft);
-  border-color: transparent;
-}
-
-.voiceLabel {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
-
-.voiceLabelTuned {
-  color: var(--accent);
-}
-
-.voiceText {
-  font-size: 13.5px;
-  line-height: 1.45;
-  color: var(--ink);
-}
-
-/* Generic sample reads muted + struck-through-in-spirit (de-emphasized). */
-.voiceGeneric {
-  color: var(--ink-2);
-}
-
 /* ── (b) Flows ───────────────────────────────────────────────────────────── */
 .flowsSection {
   flex: 1;
@@ -406,9 +356,6 @@
 /* Tablet: collapse the 3-column row into two rows — name+what over the
    autonomy pill on the left, the stats+switch cluster anchored top-right. */
 @media (max-width: 900px) {
-  .voiceCompare {
-    grid-template-columns: 1fr;
-  }
   .guardList {
     grid-template-columns: 1fr;
   }

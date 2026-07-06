@@ -14,6 +14,52 @@
   gap: 20px;
 }
 
+/* Voice source — a quiet status row above the editable fields. Inset well tone. */
+.sourceRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 11px 14px;
+}
+
+.sourceDot {
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--ok);
+  flex: none;
+}
+
+.sourceDotOff {
+  background: var(--ink-2);
+  opacity: 0.5;
+}
+
+.sourceText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sourceLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.sourceValue {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -228,6 +274,14 @@
 
 .sampleGeneric {
   color: var(--ink-2);
+}
+
+/* The honest note under the sample — it tracks the voice, not a fixed claim. */
+.sampleNote {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  margin-top: -8px;
 }
 
 /* ── Autosave wisp ────────────────────────────────────────────────────────── */

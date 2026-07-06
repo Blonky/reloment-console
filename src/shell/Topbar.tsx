@@ -7,13 +7,8 @@ export interface TopbarProps {
   title: string;
   mode: 'demo' | 'http';
   killSwitch: boolean;
-  onOpenPalette: () => void;
   onOpenNav: () => void;
 }
-
-// Show ⌘K on Apple platforms, Ctrl K elsewhere.
-const isMac =
-  typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 
 // Hamburger button — only visible ≤768px (CSS-gated). Opens the nav drawer.
 function Hamburger({ onOpenNav }: { onOpenNav: () => void }) {
@@ -40,7 +35,7 @@ function Hamburger({ onOpenNav }: { onOpenNav: () => void }) {
   );
 }
 
-export default function Topbar({ title, mode, killSwitch, onOpenPalette, onOpenNav }: TopbarProps) {
+export default function Topbar({ title, mode, killSwitch, onOpenNav }: TopbarProps) {
   if (killSwitch) {
     return (
       <header className={`${styles.topbar} ${styles.paused}`}>
@@ -58,6 +53,11 @@ export default function Topbar({ title, mode, killSwitch, onOpenPalette, onOpenN
     );
   }
 
+  // Desktop right, left→right: the removable "Demo data" chip · notifications bell
+  // · the persistent "Sending active" status pill. The status pill is the
+  // always-true system-state anchor (rightmost); the demo chip is the ONE
+  // removable affordance (leftmost, self-contained). On mobile only the bell
+  // stays here — the demo chip + status row move into the nav drawer footer.
   return (
     <header className={styles.topbar}>
       <div className={styles.left}>
@@ -66,21 +66,15 @@ export default function Topbar({ title, mode, killSwitch, onOpenPalette, onOpenN
         <span className={styles.title}>{title}</span>
       </div>
       <div className={styles.right}>
-        <button
-          type="button"
-          className={styles.paletteHint}
-          onClick={onOpenPalette}
-          aria-label="Open command palette"
-          aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
-        >
-          <span className={styles.paletteKbd}>{isMac ? '⌘' : 'Ctrl'}</span>
-          <span className={styles.paletteKbd}>K</span>
-        </button>
+        {mode === 'demo' && (
+          <span className={styles.mobileHidden}>
+            <DemoControls />
+          </span>
+        )}
         <Notifications />
-        {mode === 'demo' && <DemoControls />}
         <Link
           to="/settings"
-          className={styles.sending}
+          className={`${styles.sending} ${styles.mobileHidden}`}
           aria-label="Sending active — open Settings"
         >
           <span className={styles.dot} />

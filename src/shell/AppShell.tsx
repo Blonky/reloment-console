@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import Sidebar, {
   SidebarNav,
   SidebarSearch,
@@ -8,6 +8,7 @@ import Sidebar, {
   TenantCard,
 } from './Sidebar.tsx';
 import Topbar from './Topbar.tsx';
+import DemoControls from './DemoControls.tsx';
 import CommandPalette from './CommandPalette.tsx';
 import { LiveDataProvider } from './LiveData.tsx';
 import styles from './AppShell.module.css';
@@ -69,7 +70,6 @@ export default function AppShell({ killSwitch, mode, title, children }: AppShell
             title={title}
             mode={mode}
             killSwitch={killSwitch}
-            onOpenPalette={openPalette}
             onOpenNav={openNav}
           />
           <main className={styles.main}>
@@ -121,6 +121,28 @@ export default function AppShell({ killSwitch, mode, title, children }: AppShell
               />
               <SidebarNav onNavigate={closeNav} />
               <SidebarChats onNavigate={closeNav} />
+
+              {/* Drawer footer — the topbar's mobile-hidden controls live here:
+                  a "Demo controls" row (the same DemoControls popover, opening as
+                  a sheet — part of the one deletable demo surface) and a one-line
+                  status row into Settings. Above the Settings + tenant stack. */}
+              <div className={styles.drawerControls}>
+                {mode === 'demo' && (
+                  <div className={styles.drawerDemoRow}>
+                    <DemoControls />
+                  </div>
+                )}
+                <Link
+                  to="/settings"
+                  className={styles.drawerStatus}
+                  onClick={closeNav}
+                  aria-label="Sending active — open Settings"
+                >
+                  <span className={styles.drawerStatusDot} aria-hidden="true" />
+                  Sending active
+                </Link>
+              </div>
+
               <SettingsRow onNavigate={closeNav} />
               <TenantCard />
             </nav>

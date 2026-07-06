@@ -626,9 +626,10 @@ real session storage + a language-model planner; the `HttpClient` methods map
   missed-call auto-ack, document asks, link-send sentences, the tuned tone
   example — is **warm business-casual**: contractions, first names, one thought
   per text, zero corporate stiffness. Hard limits: **≤ 2 sentences**, **one
-  question max**, **no emojis** in agent sends. (The refusal/system copy — opt-out
-  banners, GateReason strings, centered timeline entries — is **UI**, not the
-  agent's voice, and is exempt.)
+  question max**, **no emojis** in agent sends. **No em dashes in message bodies —
+  they read as machine-written.** (The refusal/system copy — opt-out banners,
+  GateReason strings, centered timeline entries — is **UI**, not the agent's voice,
+  and is exempt; UI labels/captions/this doc's prose MAY keep em dashes.)
 - **Insights** (r14 — the **owner's report**): ONE viewport, no page scroll at
   ≥ 760px height. Not a dashboard of whitespace — a three-beat story top → bottom,
   every number derived from existing stores (no invented fixture constants). Read

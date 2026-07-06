@@ -269,7 +269,7 @@ function AvailableRow({
           <span className={styles.availName}>{item.name}</span>
           <span className={styles.availBlurb}>{item.blurb}</span>
         </div>
-        <span className={styles.requestedTag}>Requested — wired during onboarding</span>
+        <span className={styles.requestedTag}>Requested · we'll set it up with you</span>
       </div>
     );
   }
@@ -384,7 +384,10 @@ function Connections({
             <>
               <div className={styles.groupLabelRow}>
                 <span className={styles.groupLabel}>Available</span>
-                <span className={styles.groupHint}>Request one and we wire it during onboarding.</span>
+                <span className={styles.groupHint}>
+                  Request one and we set it up with you during onboarding — nothing
+                  connects by itself.
+                </span>
               </div>
               <div className={styles.availGrid}>
                 {catalog.available.map((a) => (

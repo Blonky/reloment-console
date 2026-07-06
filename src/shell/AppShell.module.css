@@ -129,3 +129,49 @@
   background: rgba(28, 27, 23, 0.05);
   color: var(--ink);
 }
+
+/* Drawer footer controls — the topbar's mobile-hidden "Demo data" chip + status
+   pill, restacked as compact rows. Hairline-separated above the Settings row. */
+.drawerControls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+/* The demo row hosts the full DemoControls trigger; it stretches to fill the row
+   so its chip reads as a proper drawer item, not a floating pill. */
+.drawerDemoRow {
+  display: flex;
+  padding: 2px 4px;
+}
+
+/* One-line status row into Settings — quiet, matches the nav-row idiom. */
+.drawerStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-decoration: none;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.drawerStatus:hover {
+  background: rgba(28, 27, 23, 0.05);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.drawerStatusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ok);
+  flex: none;
+}

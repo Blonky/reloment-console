@@ -1,3 +1,10 @@
+// The ONE demo affordance. Deleting this component (and its drawer row) removes
+// every demo control from the product — the "Demo data" chip is deliberately the
+// leftmost, self-contained item in the topbar right cluster (and a single row in
+// the mobile drawer footer) so an install-time cut is one clean deletion. The
+// "Sending active" status pill stays rightmost as the persistent system-state
+// anchor: status is the always-true card, demo is the removable one.
+//
 // DemoControls (r10) — the topbar "Demo data" pill, now a button that opens a
 // small anchored popover so the demo stays fully drivable while the product
 // surfaces read production-grade (the rail's demo box + the triage "Simulate

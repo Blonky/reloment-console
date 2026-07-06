@@ -61,8 +61,6 @@ function ProfileSkeleton() {
           <Skeleton width={260} height={12} />
         </div>
       </div>
-      <Skeleton width="70%" height={12} />
-      <Skeleton width="100%" height={72} radius="var(--radius)" />
     </section>
   );
 }
@@ -170,19 +168,6 @@ function OverviewSegment() {
                   {t}
                 </span>
               ))}
-            </div>
-          </div>
-
-          <p className={styles.trainedOn}>Trained on {p.trainedOn}.</p>
-
-          <div className={styles.voiceCompare}>
-            <div className={styles.voiceSample}>
-              <span className={styles.voiceLabel}>A generic bot says</span>
-              <p className={`${styles.voiceText} ${styles.voiceGeneric}`}>{p.example.generic}</p>
-            </div>
-            <div className={`${styles.voiceSample} ${styles.voiceTuned}`}>
-              <span className={`${styles.voiceLabel} ${styles.voiceLabelTuned}`}>Your agent says</span>
-              <p className={styles.voiceText}>{p.example.tuned}</p>
             </div>
           </div>
         </section>
