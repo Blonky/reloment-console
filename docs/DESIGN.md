@@ -405,6 +405,38 @@ own. Takeover-as-a-separate-state is gone — it collapses into the toggle.
   Only the toggle changes agent state. `agent_enabled` is the source of truth;
   `controller` ('agent' | 'human') is kept mirrored for back-compat. `takeover()`
   is now a thin alias for `setAgentEnabled(false)`.
+- **Content-aware reply drafts (r18a).** The held draft the agent proposes to a
+  normal inbound is **classified on what the customer actually said** (mirrors the
+  suggestion engine's tiers), never the old context-blind "Thanks {name}, good
+  question!". Tiers, in order:
+  - **frustration / confusion** ("wtf", "what's going on", "??"/"!!", "confused",
+    profanity-lite) → **de-escalate, own it, offer the human**, no exclamation
+    marks ("Sorry for the confusion, {name}. Tom can give you a straight answer
+    today, want him to call you this afternoon?").
+  - **bare greeting** ("hey", "heyyy", "hi", "yo") → friendly, brief, one open
+    question ("Hey {name}! What can we help with?").
+  - **thanks / positive** ("thanks", "ok great", "sounds good") → warm close, **NO
+    question** ("Anytime, {name}. We're here when you need us.").
+  - **scheduling words** ("call", "tomorrow", "time", "book") → a **concrete slot**
+    off the booking connection + memory (after-6pm → an after-6 slot).
+  - **price / renewal / rate question** → the renewal-grounded reply (Tom pulls
+    the latest rate).
+  - **coverage / limits question** → **non-advisory** (Tom advises the specifics).
+  - **default** → a grounded acknowledgement that **quotes their actual words**
+    ("On '{trimmed inbound}', let me get you a real answer, {name}. Tom can confirm
+    the details today."), never "good question!" for a non-question.
+  Every body obeys the voice canon (warm business-casual, ≤2 sentences, ≤1
+  question, no em dashes, name used naturally, never "AI").
+- **One refreshing draft, not a stack (r18a).** A new inbound arriving while a
+  held draft is pending on that conversation **replaces** it (clear + append one
+  fresh draft, a single `draft.created` + `suggestion.updated`) — classified on
+  the **latest** message but composed **run-aware**: a run of **≥2 unanswered
+  inbounds** (e.g. Dana texting "heyyy", "whats going on", "wtf") prefixes a brief
+  thread-level acknowledgement ("Sorry {name}, we're on it. …"). The timeline keeps
+  every customer bubble; only the **pending draft** stays singular. Approve still
+  works (the refreshed draft carries a new `draftId`; the slot picks it up via the
+  existing `suggestion.updated` flow). This kills the round-18 "super robotic"
+  stack of identical context-blind drafts.
 - **Regeneration** (`FeedEvent` `suggestion.updated`). Fires after **any**
   message lands on a conversation — inbound (`message.received`), an agent draft
   created, `message.sent` (approve / auto-ack), a manual send, opt-out/opt-in
@@ -577,6 +609,59 @@ real session storage + a language-model planner; the `HttpClient` methods map
   is needed (the `HttpClient`, lacking a local thread map, routes contact-name
   queries to `/contacts?q=<query>` instead of a specific conversation).
 
+#### Bottom-anchored chat + robust intent router (r17)
+
+The active-state chat obeys **ChatGPT/Manus/Sauna physics: the transcript always
+defaults to the bottom.** No matter how short the conversation, the newest message
+sits flush above the composer with the empty space *above* the transcript, never
+dead space below the composer.
+
+- **Layout contract.** In active state Home is a **definite-height flex column**
+  (`flex: none; height: calc(100dvh − topbar − content-padding)`; `dvh`, not `vh`,
+  so mobile browser chrome never leaves phantom space below the composer). The
+  order is: slim **pulse strip** (`flex: none`) → **transcript** (`flex: 1`,
+  `min-height: 0`, `overflow-y: auto` — the ONLY scroller; the document never
+  scrolls in active state) → **composer dock** (`flex: none`, last child, so it is
+  always flush at the very bottom; `env(safe-area-inset-bottom)` padding keeps it
+  above the phone home-indicator / keyboard).
+- **Bottom anchoring technique.** The transcript viewport holds an inner wrapper
+  with **`margin-top: auto`**. When the content is shorter than the viewport the
+  first message is pushed down and the newest lands adjacent to the composer — the
+  correct idiom (NOT `justify-content: flex-end`, which clips the top when content
+  overflows). Auto-scroll pins the transcript's own `scrollTop` to the bottom on
+  every new turn (instant on the first turn, smooth after). Session **replay**
+  (opening an old chat) gets the identical anchoring. Verified at 390×844 (incl. a
+  ~300px keyboard inset), 768×1024, 1440×760 (incl. transcript overflow), and
+  1512×860: message + reply flush above the composer, composer flush at the bottom,
+  zero dead space, only the transcript scrolls. The idle→active View-Transition
+  composer morph (`view-transition-name: home-composer`) is preserved.
+- **Fuzzy intent matching (deterministic, no deps).** `parseIntent` tolerates
+  typos in intent keywords and contact names via a **bounded Levenshtein** (edit
+  budget scaled to word length; short words demand exact matches). "reserch dana",
+  "breif dana", "brief dna", "whos worth calling", "renwals" all route correctly.
+  A `RESERVED_HEADS` guard stops a well-formed command being stolen by a
+  neighbouring intent (e.g. "search" is edit-distance 2 from "research" but stays
+  search). Contact-name resolution adds the same typo tolerance on top of the
+  existing exact / first-name / substring cascade.
+- **Capability-aware fallback (never a dead-end).** An unrecognized input resolves
+  to a `fallback` intent (never silently to `help`). The **FallbackCard** renders
+  one honest line ("I didn't catch that one.") plus **grouped, tappable chips**
+  (Read the book / Act / Research / Navigate) that send their phrase back through
+  the composer pipeline. When the input **contains a known contact name** (found by
+  a strict token/typo scan that never false-positives common words), the card
+  leads with an **"About {First}"** row biased to that contact (Brief / Research /
+  Take me to). The unresolved "who is X" / "brief X" paths route here too rather
+  than dead-ending.
+- **General-question honesty.** Inputs that read as general questions or small talk
+  (a question word, greeting, or open prose with no command tokens; ≥3 words) carry
+  `general: true` and the FallbackCard adds one quiet line: *"General questions run
+  on the live model with the platform connection. In this workspace I handle your
+  book, campaigns, research and navigation."* — matching the Demo popover note.
+- **Help.** "help" / "what can you do" → the compact capability card (same chip
+  behavior); also in the ⌘K catalogue ("What can you do"). **Persistence:**
+  fallback and help replies store sensible plain-text narrations, so replay reads
+  as a faithful log (fallback → "I didn't catch that one. Here's what I can do…").
+
 ## 6. Secondary screens (structured skeletons)
 
 - **Contacts**: table (name, phone, LOB, policy status, renewal, consent
@@ -732,6 +817,16 @@ HttpClient maps provider-style endpoints and degrades gracefully):
   the missed-call playbook's autonomy ceiling permits an inquiry-basis
   acknowledgement — **but it still passes the gate**: if the caller is on the
   opt-out list, no text is sent.
+  - **6-hour dedupe (r18a — model the provider's real pipeline).** The provider
+    dedupes identical auto-ack sends on line + recipient inside a **6-hour
+    window**. If the SAME caller already received the missed-call ack within that
+    window, a repeat missed call **still** appends the `missed_call` system entry
+    (the call happened and should show) and **still** emits `call.missed`, but does
+    **NOT** re-text the ack. Instead it appends ONE quiet centered entry (status
+    `suppressed_duplicate`, "Text-back suppressed · already texted {N}m ago", N
+    computed from the stamps) and audits `text_back_suppressed`. No new
+    conversation is minted (it reuses Ray's). Repeated clicks now read as a system
+    behaving **correctly**, not the round-18 bug where three identical acks stacked.
 - **Manual follow-up** — `sendManual(conversationId, body): Promise<{ ok; blockedReason? }>`.
   For human-controlled threads. Runs the **same gate semantics**: blocked returns
   `{ ok:false, blockedReason:'opted_out' }` (fail-closed); a clear gate appends

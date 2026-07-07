@@ -142,6 +142,7 @@ export function isSystemEvent(m: ThreadMessage): boolean {
   if (m.status === 'opted_back_in') return true;
   if (m.status === 'optout_corrected') return true;
   if (m.status === 'missed_call') return true;
+  if (m.status === 'suppressed_duplicate') return true;
   if (typeof m.status === 'string' && m.status.startsWith('blocked_')) return true;
   if (m.advice_verdict === 'advice_adjacent' && m.direction === 'outbound') return true;
   return false;
@@ -153,6 +154,8 @@ export function systemEventLabel(m: ThreadMessage): string | null {
   if (m.status === 'opted_back_in') return 'Opted back in — transactional messages resumed';
   if (m.status === 'optout_corrected') return 'Opt-out record corrected — full consent restored';
   if (m.status === 'missed_call') return 'Missed call · forwarded to text-back';
+  // The dedupe suppression carries its dynamic "N minutes ago" text in the body.
+  if (m.status === 'suppressed_duplicate') return m.body;
   return null;
 }
 

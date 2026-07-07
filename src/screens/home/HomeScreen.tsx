@@ -50,6 +50,7 @@ import {
   NavigateCard,
   NavigateMissReply,
   HelpCard,
+  FallbackCard,
 } from './ReplyCards.tsx';
 import type { ReplyMeta } from './ReplyCards.tsx';
 import { disclosureFor } from './gateChecks.ts';
@@ -132,11 +133,34 @@ function thinkingLabel(intent: Intent): string {
       return 'Preparing the confirmation…';
     case 'help':
       return 'One moment…';
+    case 'fallback':
+      return 'One moment…';
   }
 }
 
-// Resolve a spoken name ("dana", "dana whitfield") to a contact. First-name and
-// substring tolerant; returns the best single match or null.
+// Bounded Levenshtein — mirrors parseIntent's; early-exits over `max`. Local so
+// the name resolver can tolerate a typo ("dna" → "dana") without a dependency.
+function editDistance(a: string, b: string, max: number): number {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    const curr = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+      if (curr[j] < rowMin) rowMin = curr[j];
+    }
+    if (rowMin > max) return max + 1;
+    prev = curr;
+  }
+  return prev[b.length];
+}
+
+// Resolve a spoken name ("dana", "dana whitfield", "dna") to a contact. Exact →
+// first-name → substring → typo-tolerant (Levenshtein ≤2 on a name token).
+// Returns the best single match or null.
 function resolveContact(name: string, contacts: Contact[]): Contact | null {
   const needle = name.trim().toLowerCase();
   if (!needle) return null;
@@ -149,7 +173,49 @@ function resolveContact(name: string, contacts: Contact[]): Contact | null {
   const contains = contacts.filter((c) =>
     c.display_name.toLowerCase().includes(needle),
   );
-  return contains.length === 1 ? contains[0] : (contains[0] ?? null);
+  if (contains.length > 0) return contains[0];
+  // Typo tolerance: match the needle against each name token within a small,
+  // length-scaled edit budget. Deterministic — the closest, first-fixture wins.
+  if (needle.length >= 3) {
+    const max = needle.length <= 5 ? 1 : 2;
+    let best: { c: Contact; d: number } | null = null;
+    for (const c of contacts) {
+      for (const tok of c.display_name.toLowerCase().split(/\s+/)) {
+        if (tok.length < 3) continue;
+        const d = editDistance(needle, tok, max);
+        if (d <= max && (best === null || d < best.d)) best = { c, d };
+      }
+    }
+    if (best) return best.c;
+  }
+  return null;
+}
+
+// Scan a free-text line for a known contact name (or a close typo of one) so the
+// fallback card can bias its suggestions toward that contact. Only exact
+// name-token or a tight typo counts — NOT substring — so a common word never
+// masquerades as a contact ("same" must not resolve to "Sam"). Returns the
+// display name of the first hit, or null.
+function findContactHint(text: string, contacts: Contact[]): string | null {
+  if (contacts.length === 0) return null;
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 3);
+  const tokensOf = (c: Contact) =>
+    c.display_name.toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
+  for (const w of words) {
+    for (const c of contacts) {
+      for (const tok of tokensOf(c)) {
+        if (tok === w) return c.display_name;
+        const max = w.length <= 5 ? 1 : 2;
+        if (w.length >= 4 && editDistance(w, tok, max) <= max)
+          return c.display_name;
+      }
+    }
+  }
+  return null;
 }
 
 export default function HomeScreen() {
@@ -195,7 +261,9 @@ export default function HomeScreen() {
   const [busy, setBusy] = useState(false);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const lastTurnRef = useRef<HTMLDivElement>(null);
+  // The transcript scroll viewport (active state). In active state the TRANSCRIPT
+  // scrolls, not the document — so auto-scroll pins its scrollTop, not the page.
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const active = turns.length > 0;
   // Read active/session inside stable callbacks without adding them to deps.
@@ -204,11 +272,19 @@ export default function HomeScreen() {
   const activeSessionRef = useRef(activeSessionId);
   activeSessionRef.current = activeSessionId;
 
-  // Keep the newest turn in view — scroll the shell's document, not a nested box.
+  // Keep the newest turn in view. The transcript is its own scroll viewport in
+  // active state (bottom-anchored), so pin ITS scrollTop to the bottom on every
+  // new turn — never the document. On the first turn (viewport just mounted) jump
+  // instantly; afterward glide. Bottom-anchoring (margin-top:auto on the inner
+  // wrapper) means a short transcript already sits flush above the composer, so
+  // this only does real work once the content overflows.
+  const prevLenRef = useRef(0);
   useEffect(() => {
-    if (turns.length > 0) {
-      lastTurnRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-    }
+    const el = scrollRef.current;
+    if (!el || turns.length === 0) return;
+    const instant = prevLenRef.current === 0;
+    prevLenRef.current = turns.length;
+    el.scrollTo({ top: el.scrollHeight, behavior: instant ? 'auto' : 'smooth' });
   }, [turns]);
 
   // Replace the trailing thinking row with a reply node.
@@ -272,6 +348,35 @@ export default function HomeScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionParam, client]);
+
+  // Build the capability-fallback reply (never a dead-end). Shared by the
+  // top-level `fallback` intent and the brief/research "no such contact" paths so
+  // an unrecognized OR unresolved line always lands on the same honest card:
+  // the honest miss line, the (optional) general-question note, a contact-biased
+  // row when a real name appears in the text, and grouped capability chips.
+  const buildFallback = useCallback(
+    (text: string, general: boolean): Dispatched => {
+      const hint = findContactHint(text, contacts);
+      const narration = general
+        ? 'I didn’t catch that one. General questions run on the live model with the platform connection; here I handle your book, campaigns, research and navigation.'
+        : hint
+          ? `I didn’t catch that one. Here’s what I can do, including a few things on ${hint.split(' ')[0]}.`
+          : 'I didn’t catch that one. Here’s what I can do.';
+      return {
+        node: (
+          <FallbackCard
+            general={general}
+            contactName={hint}
+            onRun={(t) => void submit(t)}
+          />
+        ),
+        narration,
+      };
+    },
+    // submit via ref pattern (defined below); contacts is the only real dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [contacts],
+  );
 
   // Dispatch a parsed intent to its governed tool + build the reply node AND the
   // plain narration line to persist. Each tool call is wrapped in a real
@@ -339,10 +444,14 @@ export default function HomeScreen() {
         case 'brief': {
           const contact = resolveContact(intent.name, contacts);
           if (!contact) {
-            return {
-              node: <HelpCard onRun={(t) => void submit(t)} />,
-              narration: `I couldn’t find “${intent.name}” in the book.`,
-            };
+            // "who is X" / "brief X" that resolves to nobody: fall through to the
+            // capability card rather than dead-ending. A multi-word argument with
+            // no name in it ("who is the best carrier") reads as a general
+            // question; a single mistyped token stays a near-miss.
+            const general =
+              findContactHint(intent.name, contacts) === null &&
+              intent.name.trim().split(/\s+/).length > 1;
+            return buildFallback(intent.name, general);
           }
           const t0 = performance.now();
           const brief = await client.threadBrief(contact.id);
@@ -472,12 +581,14 @@ export default function HomeScreen() {
             narration: 'Listed the commands I can run today.',
           };
         }
+        case 'fallback':
+          return buildFallback(intent.text, intent.general);
       }
     },
     // submit is referenced through the ref pattern (defined below) to avoid a
     // cycle; it is otherwise stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [client, contacts, runKillSwitch, refreshLive, navigate],
+    [client, contacts, runKillSwitch, refreshLive, navigate, buildFallback],
   );
 
   // Submit a line: render the user turn + thinking row, dispatch, then persist
@@ -634,19 +745,23 @@ export default function HomeScreen() {
     </div>
   );
 
-  // Transcript renderer — live (rich) + replayed (plain) turns.
+  // Transcript renderer — live (rich) + replayed (plain) turns. The scroll
+  // viewport (.transcript) holds an inner wrapper (.transcriptInner) that carries
+  // `margin-top: auto`, so when the content is shorter than the viewport the
+  // FIRST message is pushed down and the newest sits flush above the composer
+  // (ChatGPT/Manus bottom-anchoring — no justify-content:flex-end scroll bug).
   const transcript = (
     <div
       className={styles.transcript}
+      ref={scrollRef}
       aria-live="polite"
       aria-label="Command transcript"
     >
-      {turns.map((t, i) => {
-        const isLast = i === turns.length - 1;
-        const refProp = isLast ? { ref: lastTurnRef } : {};
+      <div className={styles.transcriptInner}>
+      {turns.map((t) => {
         if (t.role === 'user' || (t.role === 'replay' && t.who === 'user')) {
           return (
-            <div className={`${styles.turn} ${styles.turnUser}`} key={t.id} {...refProp}>
+            <div className={`${styles.turn} ${styles.turnUser}`} key={t.id}>
               <div className={styles.userBubble}>{t.text}</div>
             </div>
           );
@@ -654,14 +769,14 @@ export default function HomeScreen() {
         if (t.role === 'replay') {
           // Replayed assistant line — plain text, left-aligned (no rich card).
           return (
-            <div className={`${styles.turn} ${styles.turnSystem}`} key={t.id} {...refProp}>
+            <div className={`${styles.turn} ${styles.turnSystem}`} key={t.id}>
               <div className={styles.assistantBubble}>{t.text}</div>
             </div>
           );
         }
         if (t.role === 'thinking') {
           return (
-            <div className={`${styles.turn} ${styles.turnSystem}`} key={t.id} {...refProp}>
+            <div className={`${styles.turn} ${styles.turnSystem}`} key={t.id}>
               <div className={styles.thinking}>
                 <span className={styles.thinkingDots}>
                   <span />
@@ -675,11 +790,12 @@ export default function HomeScreen() {
         }
         // live reply
         return (
-          <div className={`${styles.turn} ${styles.turnSystem}`} key={t.id} {...refProp}>
+          <div className={`${styles.turn} ${styles.turnSystem}`} key={t.id}>
             <div className={styles.systemWrap}>{t.node}</div>
           </div>
         );
       })}
+      </div>
     </div>
   );
 

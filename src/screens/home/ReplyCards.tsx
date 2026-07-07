@@ -46,7 +46,11 @@ import {
   IconNavigate,
   IconCheck,
 } from './icons.tsx';
-import { COMMAND_CATALOGUE } from './parseIntent.ts';
+import {
+  COMMAND_CATALOGUE,
+  COMMAND_GROUP_LABELS,
+  GENERAL_QUESTION_NOTE,
+} from './parseIntent.ts';
 import ArtifactCard from './ArtifactCard.tsx';
 import GateDisclosure from './GateDisclosure.tsx';
 import type { GateDisclosure as Disclosure } from './gateChecks.ts';
@@ -861,8 +865,9 @@ export function HelpCard({ onRun }: { onRun: (text: string) => void }) {
   return (
     <div className={styles.reply}>
       <p className={styles.narration}>
-        I route a fixed set of commands today. The language-model planner ships
-        with the platform connection — until then, these are exact and governed.
+        Here’s what I can do. I route a fixed set of commands today; the
+        language-model planner ships with the platform connection. Until then,
+        these are exact and governed.
       </p>
       <div className={styles.helpList}>
         {COMMAND_CATALOGUE.map((c) => (
@@ -878,6 +883,79 @@ export function HelpCard({ onRun }: { onRun: (text: string) => void }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Fallback (nothing matched) — never a dead-end ─────────────────────────────
+// One honest line + grouped, tappable capability chips. When the input contained
+// a known contact name, the card leads with a contact-biased row ("Brief me on
+// Dana", "Research Dana", "Open Dana's thread"). A line that read like a general
+// question also gets the quiet live-model note (demo honesty). Every chip sends
+// its phrase back through the composer pipeline via onRun.
+export function FallbackCard({
+  general,
+  contactName,
+  onRun,
+}: {
+  general: boolean;
+  contactName: string | null;
+  onRun: (text: string) => void;
+}) {
+  const first = contactName ? contactName.split(' ')[0] : null;
+  return (
+    <div className={styles.reply}>
+      <p className={styles.narration}>I didn’t catch that one.</p>
+      {general && (
+        <p className={styles.narrationFollow}>{GENERAL_QUESTION_NOTE}</p>
+      )}
+
+      {first && (
+        <div className={styles.fallbackGroup}>
+          <span className={styles.fallbackGroupLabel}>
+            About {first}
+          </span>
+          <div className={styles.fallbackChips}>
+            {[
+              `Brief me on ${first}`,
+              `Research ${first}`,
+              `Take me to ${first}`,
+            ].map((phrase) => (
+              <button
+                type="button"
+                className={styles.chip}
+                key={phrase}
+                onClick={() => onRun(phrase)}
+              >
+                {phrase}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className={styles.fallbackLede}>Here’s what I can do:</p>
+      {COMMAND_GROUP_LABELS.map(({ group, label }) => {
+        const entries = COMMAND_CATALOGUE.filter((c) => c.group === group);
+        if (entries.length === 0) return null;
+        return (
+          <div className={styles.fallbackGroup} key={group}>
+            <span className={styles.fallbackGroupLabel}>{label}</span>
+            <div className={styles.fallbackChips}>
+              {entries.map((c) => (
+                <button
+                  type="button"
+                  className={styles.chip}
+                  key={c.label}
+                  onClick={() => onRun(c.example)}
+                >
+                  {c.example}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

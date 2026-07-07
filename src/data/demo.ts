@@ -167,6 +167,17 @@ const AGENT_TYPING_STOP_MS = 1400; // agent typing 'stopped' + draft.created
 const MISSED_CALL_AGENT_TYPING_MS = 1200; // agent typing 'typing'
 const MISSED_CALL_AUTOSEND_MS = 2600; // agent typing 'stopped' + message.sent
 
+// The provider's real text-back pipeline dedupes identical auto-acks on
+// line + recipient within a 6-hour window: a caller who already got the
+// missed-call acknowledgement does NOT get re-texted the same line minutes
+// later. We model that here so repeated clicks read as a system behaving
+// correctly (the call still shows; the ack is suppressed honestly).
+const MISSED_CALL_DEDUPE_MS = 6 * 60 * 60_000;
+// The body of the auto-ack the missed-call playbook sends. A prior send of THIS
+// line inside the dedupe window is what suppresses a fresh one.
+const MISSED_CALL_ACK_BODY =
+  "Hey, sorry we missed you! This is Hartley Insurance's text line. What can we help with?";
+
 // Document request choreography (requestDocument). The ask sends immediately;
 // the customer then replies with a media part after a beat.
 const DOC_REPLY_TYPING_MS = 2800; // customer typing → message.received (with media)
@@ -611,7 +622,13 @@ export class DemoClient implements DataClient {
 
         setTimeout(() => {
           this.emit({ type: 'typing', conversationId, who: 'agent', state: 'stopped' });
-          const draft = this.appendHeldDraft(t, text);
+          // One refreshing draft, not a stack: a new inbound while a draft is
+          // pending REPLACES it. Count the run of unanswered inbounds BEFORE
+          // clearing so the fresh draft can acknowledge a frustration run, then
+          // drop the stale draft and append one classified on the LATEST message.
+          const run = this.trailingUnansweredInbounds(t);
+          this.clearHeldDrafts(t);
+          const draft = this.appendHeldDraft(t, text, run);
           this.emit({ type: 'draft.created', conversationId, message: this.toThreadMessage(draft) });
           // The held draft IS the new suggestion now — refresh the slot.
           this.emit({ type: 'suggestion.updated', conversationId });
@@ -660,16 +677,49 @@ export class DemoClient implements DataClient {
     return m;
   }
 
+  // The most recent missed-call auto-ack on this thread that is still inside the
+  // 6-hour dedupe window, or null. Matches the ack line the playbook sends — so a
+  // later inbound reply (or any other outbound) does not defeat the dedupe.
+  private lastMissedCallAck(t: FixtureThread): FixtureMessage | null {
+    const nowMs = this.now() + this.clockMin * 60_000;
+    for (let i = t.messages.length - 1; i >= 0; i -= 1) {
+      const m = t.messages[i];
+      if (m.direction === 'outbound' && m.status === 'sent' && m.body === MISSED_CALL_ACK_BODY) {
+        const ageMs = nowMs - new Date(m.created_at).getTime();
+        return ageMs <= MISSED_CALL_DEDUPE_MS ? m : null;
+      }
+    }
+    return null;
+  }
+
+  // A centered timeline entry noting the auto-ack was suppressed by the dedupe
+  // window (the provider re-texts nobody the same line inside 6 hours). Carries
+  // the honest "N minutes ago" in its body; rendered as a system event, not a
+  // bubble (isSystemEvent matches the 'suppressed_duplicate' status).
+  private appendSuppressedDuplicate(t: FixtureThread, agoMin: number): FixtureMessage {
+    const m: FixtureMessage = {
+      id: `msg_sys_suppressed_${t.messages.length + 1}_${t.conversationId}`,
+      direction: 'outbound',
+      body: `Text-back suppressed · already texted ${agoMin}m ago`,
+      status: 'suppressed_duplicate',
+      channel_accepted: null,
+      advice_verdict: 'none',
+      classification: 'transactional',
+      created_at: this.stamp(),
+    };
+    t.messages.push(m);
+    return m;
+  }
+
   // A held reply draft the agent proposes to a normal inbound — awaiting the
-  // operator's approval (the DraftCard money component picks this up).
-  private appendHeldDraft(t: FixtureThread, inboundText: string): FixtureMessage {
+  // operator's approval (the DraftCard money component picks this up). The body
+  // is CONTENT-AWARE: classified on the latest inbound (mirrors the suggestion
+  // engine's tiers) and run-aware (a frustration run of ≥2 unanswered inbounds
+  // gets a "we're on it" prefix), never the old context-blind "good question!".
+  private appendHeldDraft(t: FixtureThread, inboundText: string, run = 1): FixtureMessage {
     const c = contactById(t.contactId);
     const first = c?.name.split(' ')[0] ?? 'there';
-    // Grounded, warm reply — acknowledges the inbound, offers Tom's time.
-    const body =
-      `Thanks ${first}, good question! Let me pull the details and have Tom ` +
-      `confirm. Want a quick call this week to run through it?`;
-    void inboundText; // the draft is a held acknowledgement, not an LLM answer
+    const body = this.classifyReplyDraft(c, first, inboundText, run);
     const m: FixtureMessage = {
       id: `msg_draft_${t.messages.length + 1}_${t.conversationId}`,
       direction: 'outbound',
@@ -682,6 +732,95 @@ export class DemoClient implements DataClient {
     };
     t.messages.push(m);
     return m;
+  }
+
+  // Count the RUN of unanswered customer inbounds at the tail of the thread —
+  // consecutive inbound messages with no outbound `sent` after them. A prior
+  // send (or the start of the thread) resets the run. Held drafts and centered
+  // system entries are skipped (they are not answers the customer received).
+  private trailingUnansweredInbounds(t: FixtureThread): number {
+    let count = 0;
+    for (let i = t.messages.length - 1; i >= 0; i -= 1) {
+      const m = t.messages[i];
+      if (m.direction === 'outbound' && m.status === 'sent') break; // an answer resets the run
+      if (m.direction === 'inbound' && m.status === 'received') count += 1;
+      // else: a held draft or centered system entry — skip it.
+    }
+    return count;
+  }
+
+  // Content-aware reply-draft classifier (r18a). Mirrors the suggestion engine's
+  // tiers so a held draft actually answers what the customer SAID. All bodies
+  // obey the voice canon: warm business-casual, ≤2 sentences, ≤1 question, no em
+  // dashes, the name used naturally, never "AI". A frustration/greeting run of
+  // ≥2 unanswered inbounds prefixes a brief "we're on it" acknowledgement.
+  private classifyReplyDraft(
+    c: FixtureContact | undefined,
+    first: string,
+    inboundText: string,
+    run: number,
+  ): string {
+    const raw = inboundText.trim();
+    const text = raw.toLowerCase();
+    const has = (...needles: string[]): boolean => needles.some((n) => text.includes(n));
+    // A run of two-plus unanswered inbounds → a short thread-level acknowledgement
+    // so the reply reads as caught-up, not context-blind. The frustration tier
+    // handles the run itself (it already apologizes) so it never double-"Sorry"s.
+    const isRun = run >= 2;
+    const runPrefix = isRun ? `Sorry ${first}, we're on it. ` : '';
+
+    // 1) Frustration / confusion → de-escalate, own it, offer the human. No
+    //    exclamation marks in a de-escalation; no question stacking beyond one. On
+    //    a run it leads with a caught-up acknowledgement instead of a second sorry.
+    if (
+      has('wtf', 'wth', 'ridiculous', 'unacceptable', 'frustrat', 'angry', 'annoyed', 'confus', 'terrible', 'useless') ||
+      /\?\?|!!/.test(raw) ||
+      has("what's going on", 'whats going on', 'what is going on', 'no one', 'nobody', 'still waiting', 'hello?')
+    ) {
+      const lead = isRun
+        ? `Sorry ${first}, we're on it and I don't want to leave you hanging.`
+        : `Sorry for the confusion, ${first}.`;
+      return `${lead} Tom can give you a straight answer today, want him to call you this afternoon?`;
+    }
+
+    // 2) Bare greeting → friendly, brief, one open question.
+    const greetingOnly = /^(hey+|hi+|hello+|yo+|hiya|heya)[!.\s]*$/.test(text);
+    if (greetingOnly) {
+      return `${runPrefix}Hey ${first}! What can we help with?`;
+    }
+
+    // 3) Thanks / positive → warm close, NO question. Matchers are word-anchored
+    //    so a substring like "liabili-ty l-imits" never trips the thanks tier.
+    if (
+      has('thank', 'thanx', 'appreciate', 'sounds good', 'ok great', 'okay great', 'great, thanks') ||
+      /\bthx\b|\bty\b/.test(text) ||
+      /^(ok|okay|great|awesome|cool|perfect)[!.\s]*$/.test(text)
+    ) {
+      return `${runPrefix}Anytime, ${first}. We're here when you need us.`;
+    }
+
+    // 4) Scheduling words → propose a concrete slot via the booking connection +
+    //    memory (after-6pm etc.). One time offer, one question.
+    if (has('call', 'tomorrow', 'time', 'book', 'schedule', 'meet', 'appointment', 'chat', 'talk')) {
+      const afterSix =
+        (c?.memory ?? []).some((m) => /after 6pm|evening/i.test(m.value));
+      const slot = afterSix ? 'Thursday at 6:30' : 'Thursday at 2';
+      return `${runPrefix}Happy to set that up, ${first}. Tom has ${slot} open, does that work for you?`;
+    }
+
+    // 5) Price / renewal / rate question → the renewal-grounded reply.
+    if (has('price', 'cost', 'premium', 'rate', 'renew', 'quote', 'how much')) {
+      return `${runPrefix}Good question on the numbers, ${first}. Tom can pull your latest rate today, want a quick call this week to run through it?`;
+    }
+
+    // 6) Coverage / limits question → non-advisory, Tom-will-advise.
+    if (has('coverage', 'limit', 'liability', 'deductible', 'covered', 'covers', 'policy')) {
+      return `${runPrefix}Great question, ${first}. Tom can walk you through what fits your situation, want a quick call this week to go over it?`;
+    }
+
+    // 7) Default → a grounded acknowledgement that QUOTES their actual words,
+    //    never the old generic "good question!" for a non-question.
+    return `${runPrefix}On "${this.trim(raw, 48)}", let me get you a real answer, ${first}. Tom can confirm the details today.`;
   }
 
   // Resume via START restores transactional consent only; marketing stays
@@ -784,6 +923,22 @@ export class DemoClient implements DataClient {
     // listConversations()/queue()/thread() reads see it immediately).
     this.emit({ type: 'call.missed', conversationId, callerName: c.name, e164: c.e164 });
 
+    // Dedupe like the provider's real pipeline: if THIS caller already got the
+    // missed-call auto-ack within the 6-hour window, the call still shows (above)
+    // and call.missed still fired, but we do NOT re-text the same line minutes
+    // apart. Append ONE quiet suppression entry ("Text-back suppressed · already
+    // texted {N}m ago") instead. No new conversation is minted (it reuses Ray's).
+    const priorAck = this.lastMissedCallAck(t);
+    if (priorAck) {
+      const agoMs = this.now() + this.clockMin * 60_000 - new Date(priorAck.created_at).getTime();
+      const agoMin = Math.max(1, Math.round(agoMs / 60_000));
+      const entry = this.appendSuppressedDuplicate(t, agoMin);
+      this.appendAudit('missed_call_agent', 'text_back_suppressed', `dedupe_6h ${agoMin}m`);
+      this.emit({ type: 'message.sent', conversationId, message: this.toThreadMessage(entry) });
+      this.emit({ type: 'suggestion.updated', conversationId });
+      return delay({ conversationId });
+    }
+
     // If the caller opted out — or the missed-call playbook is turned OFF — the
     // playbook stays silent (no typing, no text-back). The conversation was still
     // minted above so the missed call is visible; it just won't auto-answer.
@@ -799,11 +954,7 @@ export class DemoClient implements DataClient {
         this.appendAudit('send_gate', 'send_gate', decision.auditReason);
         if (decision.decision !== 'ALLOW') return;
         const channel = pickChannel(contactId);
-        const sent = this.appendSent(
-          t!,
-          "Hey, sorry we missed you! This is Hartley Insurance's text line. What can we help with?",
-          channel,
-        );
+        const sent = this.appendSent(t!, MISSED_CALL_ACK_BODY, channel);
         this.appendAudit('missed_call_agent', 'message.sent', `auto_ack channel:${channel}`);
         this.emit({ type: 'message.sent', conversationId, message: this.toThreadMessage(sent) });
         this.emit({ type: 'suggestion.updated', conversationId });

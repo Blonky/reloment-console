@@ -229,16 +229,33 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Active: transcript ─────────────────────────────────────────────────── */
+/* ── Active: transcript (bottom-anchored scroll viewport) ─────────────────────
+   The active page is a flex column that fills the available height; the
+   transcript is flex:1 and the ONLY thing that scrolls (the document does not).
+   Its inner wrapper carries margin-top:auto so a short conversation is pushed to
+   the BOTTOM — the first message sits low and the newest lands flush above the
+   composer (ChatGPT/Manus physics), with no justify-content:flex-end scroll bug
+   (that variant clips the top when content overflows; margin-top:auto does not).*/
 .transcript {
+  flex: 1;
+  min-height: 0;
   width: 100%;
   max-width: 720px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+}
+
+.transcriptInner {
+  /* Pushes content down when shorter than the viewport → bottom anchoring. */
+  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding-top: 8px;
-  /* Never let the sticky composer overlap the last card. */
-  padding-bottom: 128px;
+  /* Breathing room above the dock so the newest card never kisses the composer. */
+  padding-bottom: 12px;
 }
 
 .turn {
@@ -332,19 +349,17 @@
   }
 }
 
-/* ── Sticky composer dock (active) ──────────────────────────────────────── */
+/* ── Composer dock (active) — flush at the bottom of the flex column ────────
+   The dock is the last child of the flex-column page (flex:none), so it always
+   sits at the very bottom of the viewport; the transcript above it scrolls. On
+   mobile the safe-area inset keeps it above the home indicator / keyboard. */
 .composerDock {
-  position: sticky;
-  bottom: 24px;
+  flex: none;
   z-index: 4;
   width: 100%;
   max-width: 720px;
-  margin-top: -104px; /* pull it up over the transcript's bottom padding */
-  pointer-events: none;
-}
-
-.composerDock > * {
-  pointer-events: auto;
+  padding-top: 8px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ── Analytics band (idle only) ─────────────────────────────────────────── */
@@ -681,12 +696,24 @@
   color: var(--ink-2);
 }
 
-/* ── Active: slim pulse strip ───────────────────────────────────────────── */
+/* ── Active: a bottom-anchored chat that fills exactly one viewport ───────────
+   The page is a definite-height flex column: pulse strip (flex:none) → transcript
+   (flex:1, scrolls) → composer dock (flex:none, flush at the bottom). Height is
+   100dvh minus the topbar and the .content 40px top/bottom padding, so the whole
+   chat fits without the document scrolling. dvh (not vh) keeps mobile browser
+   chrome from creating phantom space below the composer. */
 .pageActive {
-  min-height: calc(100vh - var(--topbar-h) - 80px);
+  /* flex:none so the explicit height is authoritative — base .page uses flex:1
+     (flex-basis:0), which would otherwise let the column grow past the viewport
+     and hand the scroll to the document instead of the transcript. */
+  flex: none;
+  height: calc(100dvh - var(--topbar-h) - 80px);
+  min-height: 0;
+  justify-content: flex-start;
 }
 
 .pulseStripSlot {
+  flex: none;
   width: 100%;
   max-width: 720px;
 }
@@ -1386,6 +1413,34 @@
   color: var(--block);
 }
 
+/* ── Fallback card (nothing matched) — grouped, tappable capability chips ───── */
+.fallbackLede {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 2px;
+}
+
+.fallbackGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.fallbackGroupLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+
+.fallbackChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* ── Research / enrichment waterfall (r11) ────────────────────────────────────
    The four steps as stacked rows: hit = quiet check + facts; miss = em-dash;
    needs_platform = muted "runs on the platform connection" pill. The consentNote
@@ -1611,8 +1666,14 @@
     min-height: 0;
   }
 
+  /* Active chat fills the phone viewport exactly (dvh so browser chrome doesn't
+     leave phantom space below the composer). Content padding here is 20px
+     top/bottom → subtract 40px. The composer's safe-area padding keeps it above
+     the home indicator / keyboard. */
   .pageActive {
-    min-height: calc(100vh - var(--topbar-h) - 40px);
+    flex: none;
+    height: calc(100dvh - var(--topbar-h) - 40px);
+    min-height: 0;
   }
 
   /* Signals wrap: allow the row to break so the action drops below the text

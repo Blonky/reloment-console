@@ -143,6 +143,14 @@ const IconNavigate = (
   </Svg>
 );
 
+const IconHelp = (
+  <Svg>
+    <circle cx="8" cy="8" r="6" />
+    <path d="M6.3 6.2a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.5-.7 1v.4" />
+    <path d="M8 11.6h.01" />
+  </Svg>
+);
+
 // ── Item model ────────────────────────────────────────────────────────────────
 type PaletteItem = {
   id: string;
@@ -172,6 +180,7 @@ const ITEMS: PaletteItem[] = [
   { id: 'cmd-navigate', kind: 'command', phrase: 'Take me to the Inbox', label: 'Take me to the Inbox', group: 'Commands', icon: IconNavigate, keywords: 'navigate take me to open go jump inbox contacts agent insights settings' },
   { id: 'cmd-pause', kind: 'command', phrase: 'Pause all sending', label: 'Pause all sending', group: 'Commands', icon: IconPause, keywords: 'kill switch stop halt freeze emergency pause everything' },
   { id: 'cmd-resume', kind: 'command', phrase: 'Resume sending', label: 'Resume sending', group: 'Commands', icon: IconResume, keywords: 'unpause resume start again re-enable clear' },
+  { id: 'cmd-help', kind: 'command', phrase: 'Help', label: 'What can you do', group: 'Commands', icon: IconHelp, keywords: 'help commands capabilities what can you do how does this work catalogue' },
 ];
 
 // Ranked match: an exact label hit must always beat a keyword hit (typing

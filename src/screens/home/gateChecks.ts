@@ -150,7 +150,11 @@ export function disclosureFor(
       };
     }
 
+    // Help + fallback are pure UI replies (a capability card) — no sends, no
+    // gate. They never actually reach here (their dispatch builds no disclosure),
+    // but the switch stays exhaustive so a new intent can't silently skip a case.
     case 'help':
+    case 'fallback':
       return { kind: 'read_only' };
   }
 }
