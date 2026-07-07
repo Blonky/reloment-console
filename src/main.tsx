@@ -4,11 +4,14 @@ import { BrowserRouter } from 'react-router-dom';
 import '@fontsource-variable/fraunces/index.css';
 import './theme.css';
 import { App } from './App.tsx';
+import DemoGate from './shell/DemoGate.tsx';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <DemoGate>
+        <App />
+      </DemoGate>
     </BrowserRouter>
   </StrictMode>,
 );
