@@ -37,7 +37,6 @@ import type {
   HomePulse,
   InboundResult,
   InsightsReport,
-  LineAgent,
   LinkPart,
   MediaPart,
   MessagePart,
@@ -61,7 +60,6 @@ import {
   DEMO_NOW,
   HOME_PULSE,
   LICENSED_AGENT,
-  LINE_AGENTS,
   LINE_DISPLAY,
   OUTCOMES,
   PLAYBOOK_HISTORY,
@@ -1608,20 +1606,6 @@ export class DemoClient implements DataClient {
           month: d.toISOString().slice(0, 7),
         };
       }),
-    );
-  }
-
-  agents(): Promise<LineAgent[]> {
-    return delay(
-      LINE_AGENTS.map((a) => ({
-        key: a.key,
-        name: a.name,
-        e164: a.e164,
-        registered: a.registered,
-        quarantined: a.quarantined,
-        autonomyCeiling: a.autonomyCeiling,
-        playbooks: a.playbooks,
-      })),
     );
   }
 

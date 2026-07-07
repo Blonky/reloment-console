@@ -370,16 +370,6 @@ export interface InsightsReport {
   };
 }
 
-export interface LineAgent {
-  key: string; // playbook/agent key or line role
-  name: string; // human name of the agent
-  e164: string; // the line it originates on
-  registered: boolean;
-  quarantined: boolean;
-  autonomyCeiling: Autonomy;
-  playbooks: string[]; // playbook names attached
-}
-
 export interface AuditRow {
   time: string; // ISO
   actor: string;

@@ -6,7 +6,6 @@
 
 import type {
   AdviceVerdict,
-  Autonomy,
   Channel,
   Classification,
   Direction,
@@ -490,46 +489,6 @@ export const SIGNALS: string[] = [
   '2 win-back candidates aged past 90 days',
   'Dana Whitfield renews in 21 days — renewal draft ready for approval',
   'Marcus Lee asked a coverage question — routed to a licensed human',
-];
-
-// ── Line / agent roster (seed.ts line + playbooks; autonomy is agency policy) ─
-export interface FixtureLineAgent {
-  key: string;
-  name: string;
-  e164: string;
-  registered: boolean;
-  quarantined: boolean;
-  autonomyCeiling: Autonomy;
-  playbooks: string[];
-}
-export const LINE_AGENTS: FixtureLineAgent[] = [
-  {
-    key: 'renewals_agent',
-    name: 'Renewals agent',
-    e164: LINE_E164,
-    registered: true,
-    quarantined: false,
-    autonomyCeiling: 'approved_send',
-    playbooks: ['Renewal reminder'],
-  },
-  {
-    key: 'speed_to_lead_agent',
-    name: 'Speed-to-lead agent',
-    e164: LINE_E164,
-    registered: true,
-    quarantined: false,
-    autonomyCeiling: 'approved_send',
-    playbooks: ['Speed to lead'],
-  },
-  {
-    key: 'winback_agent',
-    name: 'Win-back agent',
-    e164: LINE_E164,
-    registered: true,
-    quarantined: false,
-    autonomyCeiling: 'draft',
-    playbooks: ['Win back lapsed quotes'],
-  },
 ];
 
 // ── Audit sample (hash-chained; deterministic short digests) ────────────────

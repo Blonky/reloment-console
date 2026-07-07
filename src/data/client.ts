@@ -24,7 +24,6 @@ import type {
   HomePulse,
   InboundResult,
   InsightsReport,
-  LineAgent,
   OutcomeRow,
   PlaybookFlow,
   QueueItem,
@@ -133,7 +132,6 @@ export interface DataClient {
   // audit record) / PIPELINE (renewals, reactivation, bundle candidates from the
   // book). Every field derives from existing state — no new hardcoded stats.
   insightsReport(): Promise<InsightsReport>;
-  agents(): Promise<LineAgent[]>;
   auditSample(): Promise<AuditRow[]>;
   optOuts(): Promise<Contact[]>;
   // Correct an opt-out record made in error (r16) — a wrong number, an internal

@@ -37,7 +37,6 @@ import type {
   ThreadMessage,
   ToneProfile,
   OutcomeRow,
-  LineAgent,
 } from './types.ts';
 
 export class HttpClient implements DataClient {
@@ -529,9 +528,6 @@ export class HttpClient implements DataClient {
         more: { renewals30d: 0, reactivation: 0, bundle: 0 },
       },
     }));
-  }
-  async agents(): Promise<LineAgent[]> {
-    return this.req<LineAgent[]>('/api/agents').catch(() => []);
   }
   async auditSample(): Promise<AuditRow[]> {
     return this.req<AuditRow[]>('/api/audit').catch(() => []);
