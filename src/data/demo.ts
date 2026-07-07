@@ -355,6 +355,39 @@ export class DemoClient implements DataClient {
     for (const h of this.feedHandlers) h(event);
   }
 
+  // Memory evolution (r20) — the demo's deterministic stand-in for the platform
+  // extractor (agents/memory.ts). Same observable contract: a fact only ever
+  // derives from words ACTUALLY in the customer's text (each rule is a regex
+  // over it — the demo analogue of the verbatim-evidence gate), duplicates are
+  // skipped, the learn is audited, and memory.changed announces it so Contacts
+  // and the open thread's brief update live.
+  private learnFromText(contactId: string, conversationId: string, text: string): void {
+    const c = contactById(contactId);
+    if (!c) return;
+    const lower = text.toLowerCase();
+    const learned: string[] = [];
+
+    const timeMatch = lower.match(/\bafter (\d{1,2}\s?(?:am|pm))\b/);
+    if (timeMatch) learned.push(`Prefers contact after ${timeMatch[1]}`);
+    if (/\b(?:son|daughter)\b[^.!?]*\b(?:license|permit|driver)/.test(lower)) {
+      learned.push('Has a newly licensed teen driver in the household');
+    }
+    const soldMatch = lower.match(/\bsold (?:the|our|my) (boat|car|truck|rv|motorcycle)\b/);
+    if (soldMatch) learned.push(`Sold their ${soldMatch[1]}`);
+    const newMatch = lower.match(/\b(?:bought|got|getting|buying) a new (car|truck|house|home|boat)\b/);
+    if (newMatch) learned.push(`Recently added a new ${newMatch[1]}`);
+
+    let changed = false;
+    for (const value of learned.slice(0, 3)) {
+      const dup = c.memory.some((m) => m.value.toLowerCase() === value.toLowerCase());
+      if (dup) continue;
+      c.memory.push({ value, source: 'conversation' });
+      this.appendAudit('memory_agent', 'memory_learned', value);
+      changed = true;
+    }
+    if (changed) this.emit({ type: 'memory.changed', contactId, conversationId });
+  }
+
   // Mutable session state, seeded from the deterministic fixtures.
   private killSwitch = false;
   private optedOut = new Set<string>(
@@ -718,6 +751,13 @@ export class DemoClient implements DataClient {
         }
         return;
       }
+
+      // Memory evolution (r20): the demo mirror of the platform's learning path.
+      // The real backend extracts durable facts with an LLM behind a verbatim-
+      // evidence grounding gate; the demo keeps the same OBSERVABLE behavior with
+      // deterministic rules — a fact is only ever derived from words actually in
+      // the text, deduped against the board, and announced via memory.changed.
+      this.learnFromText(t.contactId, conversationId, body);
 
       // Normal message. Agent ON + not-opted-out → the existing typing→held-draft
       // flow (agent typing ~900ms in, then typing stopped + draft.created). Agent

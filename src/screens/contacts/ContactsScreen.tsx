@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Card,
   Avatar,
@@ -22,8 +22,22 @@ import styles from './ContactsScreen.module.css';
 
 export default function ContactsScreen() {
   const client = useClient();
-  const { data, loading, error } = useData(() => client.contacts(), [client]);
+  const { data, loading, error, refetch } = useData(() => client.contacts(), [client]);
   const [selected, setSelected] = useState<Contact | null>(null);
+
+  // Memory evolution (r20): when the agent learns/corrects a fact about a
+  // contact, refetch the book so the memory board here reflects it live —
+  // "each control panel understands as the agent evolves."
+  useEffect(() => {
+    return client.subscribe((e) => {
+      if (e.type === 'memory.changed') refetch();
+    });
+  }, [client, refetch]);
+
+  // Keep the open detail panel pointed at the FRESH row after a refetch, so a
+  // just-learned memory appears without closing/reopening the panel.
+  const selectedFresh =
+    selected === null ? null : (data?.find((c) => c.id === selected.id) ?? selected);
 
   return (
     <div className={styles.page}>
@@ -31,8 +45,8 @@ export default function ContactsScreen() {
         <h1 className={styles.pageTitle}>Contacts</h1>
         <p className={styles.pageSub}>
           {data === undefined
-            ? 'The Hartley book'
-            : `${data.length} ${data.length === 1 ? 'person' : 'people'} in the Hartley book`}
+            ? 'The book of business'
+            : `${data.length} ${data.length === 1 ? 'person' : 'people'} in the book`}
         </p>
       </header>
 
@@ -94,8 +108,8 @@ export default function ContactsScreen() {
         </Card>
       )}
 
-      {selected !== null && (
-        <ContactDetail contact={selected} onClose={() => setSelected(null)} />
+      {selectedFresh !== null && (
+        <ContactDetail contact={selectedFresh} onClose={() => setSelected(null)} />
       )}
     </div>
   );

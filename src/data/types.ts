@@ -94,7 +94,14 @@ export type FeedEvent =
   // the Home briefing) refetch on it, so teaching visibly round-trips live with no
   // manual reload. The platform emits the same event on its /api/knowledge +
   // /api/agent/voice writes.
-  | { type: 'knowledge.changed' };
+  | { type: 'knowledge.changed' }
+  // Memory evolution (r20): a contact's memory board changed — the agent learned
+  // a fact from a customer text (grounding-gated on the platform: a fact is only
+  // stored with a verbatim evidence quote from the message), or the operator
+  // taught/corrected one by prompt (save_memory / forget_memory). Surfaces that
+  // render memory (the open thread's brief, Contacts) refetch on it, so the
+  // agent's understanding visibly evolves live.
+  | { type: 'memory.changed'; contactId: string; conversationId?: string };
 
 // ── Steering (r10) — the human asks the agent to work toward a goal ─────────
 // A per-conversation steer the producer sets on a live thread. The suggestion

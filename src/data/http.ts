@@ -257,6 +257,16 @@ export class HttpClient implements DataClient {
         }
       });
 
+      es.addEventListener('memory.changed', (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data) as { contactId: string; conversationId?: string; at?: string };
+          if (data.at) this.lastEventAt = data.at;
+          this.emit({ type: 'memory.changed', contactId: data.contactId, conversationId: data.conversationId });
+        } catch {
+          // Malformed frame — ignore.
+        }
+      });
+
       es.onerror = () => {
         // Missing/failing backend: degrade to a silent no-op.
         this.closeStream();
