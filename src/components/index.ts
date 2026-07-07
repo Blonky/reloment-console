@@ -1,9 +1,6 @@
 export { default as Card } from './Card.tsx';
 export type { CardProps } from './Card.tsx';
 
-export { default as MetricTile } from './MetricTile.tsx';
-export type { MetricTileProps } from './MetricTile.tsx';
-
 export { default as StatusPill } from './StatusPill.tsx';
 export type { StatusPillProps, StatusTone } from './StatusPill.tsx';
 

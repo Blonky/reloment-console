@@ -8,7 +8,7 @@ import DemoGate from './shell/DemoGate.tsx';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename="/demo">
       <DemoGate>
         <App />
       </DemoGate>

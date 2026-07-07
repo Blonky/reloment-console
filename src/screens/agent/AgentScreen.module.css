@@ -403,6 +403,29 @@
     margin-left: 0;
     width: 100%;
   }
+  /* Phone flow rows fully stack: the name+description gets the full width (no
+     word-per-line wrap), the autonomy pill + stats/switch cluster sits below it,
+     left-aligned. The tablet two-column split squeezes the main column too hard
+     at ~390px. */
+  .flowRow {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'main'
+      'auto'
+      'right';
+    row-gap: 10px;
+  }
+  .flowRight {
+    grid-area: right;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+  }
+  .flowStats {
+    text-align: left;
+  }
   /* Segments stack cleanly under the title on phones — full-width, even split. */
   .pageHead {
     align-items: stretch;
