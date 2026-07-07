@@ -45,6 +45,7 @@ import {
   IconMissedCall,
   IconNavigate,
   IconCheck,
+  IconTeach,
 } from './icons.tsx';
 import {
   COMMAND_CATALOGUE,
@@ -883,6 +884,45 @@ export function HelpCard({ onRun }: { onRun: (text: string) => void }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Teach the agent (r19) — a control reply confirming a brain write ──────────
+// One control-style confirmation line + (when the text smelled like a compliance
+// override) the honest guardrail note, then an artifact-style link into the Agent
+// tab so the operator can see the change land. No gate disclosure — teaching is a
+// write to the agent's own knowledge, not a send.
+export function TeachCard({
+  confirm,
+  where,
+  compliance,
+}: {
+  confirm: string;
+  where: string;
+  compliance: boolean;
+}) {
+  // Deep-link straight to the segment the write landed on where we can — the
+  // Agent screen reads no query today, so link to /agent and name the segment.
+  return (
+    <div className={styles.reply}>
+      <p className={styles.narration}>{confirm}</p>
+      {compliance && (
+        <p className={styles.narrationFollow}>
+          House rules shape tone and approach. The compliance guardrails are not
+          editable.
+        </p>
+      )}
+      <Link to="/agent" className={styles.navArtifact}>
+        <span className={styles.navArtifactIcon}>
+          <IconTeach />
+        </span>
+        <span className={styles.navArtifactMain}>
+          <span className={styles.navArtifactTitle}>Open the Agent tab</span>
+          <span className={styles.navArtifactHref}>{where} · what you just taught it</span>
+        </span>
+        <span className={styles.navArtifactAction}>Open →</span>
+      </Link>
     </div>
   );
 }

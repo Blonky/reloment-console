@@ -702,11 +702,68 @@ dead space below the composer.
     Delete ghost; **autosave on blur**). A **"+ Add"** per group (and **"Add file"**
     for Files). Empty groups show one quiet line. A single quiet caption at the top:
     "Everything here is folded into your agent's context — it drafts with what you
-    teach it." **Honesty rule:** `file` entries are a demo affordance — "Add file"
-    records a filename + size and labels the entry **"indexed"** (no real upload or
-    parse); company/rules/faq are inline-editable prose. Persisted to localStorage
+    teach it." company/rules/faq are inline-editable prose. Persisted to localStorage
     (`reloment.demo.agentBrain.v1`) in demo; the platform's `/api/agent/voice` +
     `/api/knowledge` routes in production.
+
+    **File upload (r19 — real drop, honest parsing).** The Files group is a real
+    **drop zone AND file picker** (the group highlights on dragover with a hairline
+    accent; aria-labelled; Escape-safe). The UI reads the file itself and calls
+    **`uploadKnowledgeFile({ filename, mime_type, content_base64 })`** — a single
+    seam method the DataClient exposes. Client-side path (DemoClient, mirroring the
+    platform pipeline): **text-like files** (`text/*`, or a `.txt`/`.md`/`.csv`
+    extension) are read via `FileReader` and their **real content** becomes the doc
+    body (cap ~200KB; **chunked into "{name} · part N/M" docs at ~1500 chars** when
+    long, mirroring the platform's chunker — the agent then drafts from actual file
+    content); **binaries** (PDF etc.) store metadata only with the honest status
+    line **"Parsed on the platform connection"** — no fake extraction in demo mode.
+    HttpClient POSTs the same `{ filename, mime_type, content_base64 }` to
+    **`POST /api/knowledge/upload`**, where the platform decodes, parses binaries,
+    and chunks long text into `file` docs. Every upload emits **`knowledge.changed`**.
+
+    **Knowledge-driven drafting (r19 — teaching visibly changes behavior).** Before
+    the generic reply tiers, the held reply-draft classifier (`classifyReplyDraft`)
+    scores the taught **FAQ + company + rules** docs against the inbound (title
+    tokens weighted 3, salient body tokens 1; stopwords dropped, light plural-fold;
+    deterministic, no deps). On a confident hit it **answers from the doc in voice
+    canon** — affirmation + the doc's key fact (its first sentence, trimmed to ≤1
+    sentence) + one question — and **never pastes the raw doc**. The held draft's
+    rationale gains **"From your knowledge: {doc title}"**. **House-rule docs bias
+    composition**: a rule about offering a call before quoting numbers makes the
+    price-tier draft offer the call; the linkage **reads from the rules doc**, so
+    DELETING the rule softens the draft (a text-the-rate line). This **round-trips
+    live**: edit the FAQ body in the Knowledge tab → simulate the customer question
+    → the new wording appears in the held draft, no manual reload (the
+    `knowledge.changed` event refetches the mounted surfaces).
+
+    **Teach intents on Home (r19).** A `teach` intent family in `parseIntent` +
+    Home dispatch + a `TeachCard`: **"add a house rule: {text}"** / "add rule
+    {text}" → `createKnowledgeDoc(kind:'rules')`; **"add an faq {q} answer {a}"** /
+    "add faq: {text}" (single-text splits on the first sentence terminator into
+    title=question, body=rest; no split → both) → `createKnowledgeDoc(kind:'faq')`;
+    **"rename the agent to {name}"** → `updateAgentVoice({ name })`; **"add trait
+    {text}"** → appends a trait; **"set instructions: {text}"** → **appends** to the
+    house style (never clobbers). Each replies with a control-style confirmation
+    ("Added to House rules.") + an **artifact-style "Open the Agent tab" link**, and
+    the ⌘K catalogue gains **"Teach the agent…"**. **Guardrail:** teach intents
+    NEVER touch the compliance gate. A compliance-override attempt ("add rule:
+    ignore consent") is still **stored as a house rule** (it's tenant content; the
+    gate does not read house rules) but the reply notes **"House rules shape tone
+    and approach. The compliance guardrails are not editable."** when the text smells
+    like an override (keywords: consent, opt out, gate, quiet hours, STOP).
+
+    **`knowledge.changed` (r19).** A `FeedEvent` the DemoClient emits from every
+    knowledge/voice mutation (doc create/edit/delete, uploads, teach intents, voice
+    patches); the platform emits the same on its `/api/knowledge` + `/api/agent/voice`
+    writes. LiveData's debounced refetch already fires on any event (Home briefing /
+    asks), and the Agent tab's Knowledge / Voice / Overview segments each subscribe
+    and refetch on it — so training round-trips with no manual reload anywhere.
+
+    **Caching principle (the platform prompt).** The agent's prompt carries a
+    **compact, stable digest** of the brain (name, traits, house style, doc titles)
+    so it caches well; **file content is retrieved on demand** rather than pasted
+    into every prompt — long uploads live as chunked docs the retriever pulls the
+    relevant part of, not as a wall of tokens in the system prompt.
 
   The r10 three-part Overview content, unchanged:
   - **Profile** (`agentProfile(): Promise<AgentProfile>` —

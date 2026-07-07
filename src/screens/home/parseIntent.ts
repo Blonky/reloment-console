@@ -21,6 +21,17 @@ export type Intent =
   | { kind: 'missed_call' } // client.simulateMissedCall() — text-back demo
   | { kind: 'research'; name: string } // client.researchContact(name) — enrichment waterfall
   | { kind: 'navigate'; query: string } // client.resolveNavigate(query) — "take me to…"
+  // Teach the agent (r19) — write to the knowledge base / voice store. The
+  // deterministic router mirrors the platform planner's upsert_knowledge /
+  // update_agent_voice tools. `op` names the write; the fields carry the content.
+  // Guardrail: teach never edits the compliance gate; a compliance-override
+  // attempt still stores the text as a house rule but the reply notes the limit.
+  | {
+      kind: 'teach';
+      op: 'add_rule' | 'add_faq' | 'rename_agent' | 'add_trait' | 'set_instructions';
+      title?: string; // rule / faq title, new agent name, or the trait/instruction text
+      body?: string; // faq answer / rule body when a Q+A split was given
+    }
   | { kind: 'pause' } // kill switch → on (typed confirm)
   | { kind: 'resume' } // kill switch → off (typed confirm)
   | { kind: 'help' } // honest capabilities card
@@ -277,11 +288,99 @@ function isBookReadNoun(target: string): boolean {
   );
 }
 
+// ── Teach intents (r19) — write to the agent's brain ─────────────────────────
+// Parsed off the RAW input (not the normalized text) so the taught content keeps
+// its original casing and punctuation. Recognizes:
+//   "add a house rule: {text}" / "add rule {text}"       → add_rule
+//   "add an faq {q} answer {a}" / "add faq: {text}"      → add_faq
+//   "rename the agent to {name}"                          → rename_agent
+//   "add trait {text}"                                    → add_trait
+//   "set instructions: {text}"                            → set_instructions
+// A single-text FAQ ("add faq: Do you offer boat coverage? Yes we do.") splits on
+// the first sentence terminator into title=question, body=rest; if there's no
+// split the whole text is both title and body. Returns null when nothing matches.
+function parseTeach(raw: string): Intent | null {
+  const trimmed = raw.trim();
+  const lower = trimmed.toLowerCase();
+
+  // rename the agent to {name} — take the tail verbatim (trim trailing punctuation).
+  const rename = /^rename (?:the )?agent(?: to| as)?\s+(.+)$/i.exec(trimmed);
+  if (rename) {
+    const name = rename[1].trim().replace(/[.!]+$/, '');
+    if (name) return { kind: 'teach', op: 'rename_agent', title: name };
+  }
+
+  // set instructions: {text}  /  set (house )?style: {text}  /  append to instructions {text}
+  const instr =
+    /^(?:set|update|append to|add to)\s+(?:the\s+)?(?:instructions?|house\s*style|style)\s*[:\-]?\s+(.+)$/i.exec(
+      trimmed,
+    );
+  if (instr) {
+    const body = instr[1].trim();
+    if (body) return { kind: 'teach', op: 'set_instructions', title: body };
+  }
+
+  // add trait {text}  /  add a trait: {text}
+  const trait = /^add\s+(?:a\s+)?trait\s*[:\-]?\s+(.+)$/i.exec(trimmed);
+  if (trait) {
+    const t = trait[1].trim().replace(/[.!]+$/, '');
+    if (t) return { kind: 'teach', op: 'add_trait', title: t };
+  }
+
+  // add an faq {q} answer {a}  — an explicit Q/A split on the word "answer".
+  const faqQA = /^add\s+(?:an?\s+)?faq\s*[:\-]?\s+(.+?)\s+answer[:\-]?\s+(.+)$/i.exec(trimmed);
+  if (faqQA) {
+    const title = faqQA[1].trim();
+    const body = faqQA[2].trim();
+    if (title && body) return { kind: 'teach', op: 'add_faq', title, body };
+  }
+
+  // add faq: {text}  /  add an faq {text}  — single-text; split into Q + A.
+  const faq = /^add\s+(?:an?\s+)?faq\s*[:\-]?\s+(.+)$/i.exec(trimmed);
+  if (faq) {
+    const whole = faq[1].trim();
+    const split = /^(.+?[.!?])\s+(.+)$/.exec(whole);
+    if (split) return { kind: 'teach', op: 'add_faq', title: split[1].trim(), body: split[2].trim() };
+    return { kind: 'teach', op: 'add_faq', title: whole, body: whole };
+  }
+
+  // add a house rule: {text}  /  add house rule {text}  /  add rule {text}
+  const rule = /^add\s+(?:a\s+)?(?:house\s+)?rule\s*[:\-]?\s+(.+)$/i.exec(trimmed);
+  if (rule) {
+    const body = rule[1].trim();
+    if (body) {
+      // Title = first clause (before a terminator/colon), body = the whole text so
+      // the rule is captured verbatim and the demote-to-title stays short.
+      const clause = /^(.+?)[:.!?]\s/.exec(body);
+      const title = (clause ? clause[1] : body).trim().slice(0, 60);
+      return { kind: 'teach', op: 'add_rule', title, body };
+    }
+  }
+
+  void lower;
+  return null;
+}
+
+// Compliance-override smell (r19): teach content that reads as an attempt to edit
+// the immutable compliance gate. We still STORE it (it's tenant content; the gate
+// does not read house rules) but the reply notes the guardrails are not editable.
+const COMPLIANCE_SMELL = /\b(consent|opt[\s-]?out|opt[\s-]?outs|quiet hours?|\bstop\b|the gate|guardrail)\b/i;
+
+export function smellsLikeComplianceOverride(text: string): boolean {
+  return COMPLIANCE_SMELL.test(text);
+}
+
 export function parseIntent(input: string): Intent {
   const text = normalize(input);
   if (text.length === 0) return { kind: 'help' };
 
   if (any(text, HELP_PATTERNS)) return { kind: 'help' };
+
+  // Teach intents (r19) — matched EARLY off the raw input so "add a house rule:
+  // always mention renewals" isn't stolen by the renewals bank, and the taught
+  // content keeps its original casing/punctuation.
+  const teach = parseTeach(input);
+  if (teach) return teach;
 
   // Kill-switch verbs first: "resume" before "pause" (resume also contains no
   // pause token, but stop-family words must not shadow an explicit resume).
@@ -412,6 +511,12 @@ export const COMMAND_CATALOGUE: CommandDoc[] = [
     label: 'Who should we call today',
     example: 'Who should we call today',
     blurb: 'A ranked producer worklist — texting is never suggested without consent.',
+    group: 'act',
+  },
+  {
+    label: 'Teach the agent…',
+    example: 'Add a house rule: always mention our office hours',
+    blurb: 'Add a house rule, an FAQ, a trait, or rename the agent — it drafts with what you teach it.',
     group: 'act',
   },
   {

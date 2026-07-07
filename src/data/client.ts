@@ -173,6 +173,21 @@ export interface DataClient {
   ): Promise<KnowledgeDoc>;
   deleteKnowledgeDoc(id: string): Promise<void>;
 
+  // Upload a file into the Files group (r19). The UI reads the file itself: it
+  // passes { filename, mime_type, content_base64 } — text-like files (.txt/.md/
+  // .csv, text/*) are read client-side so their real content becomes the doc body
+  // (chunked into "part N/M" docs when long, mirroring the platform's chunker);
+  // binaries (PDF etc.) store metadata with an honest "Parsed on the platform
+  // connection" status. The DemoClient decodes content_base64 and does the whole
+  // client-side path internally; HttpClient POSTs the same payload to
+  // /api/knowledge/upload where the platform chunks + parses. Emits
+  // knowledge.changed so mounted brain surfaces refetch live.
+  uploadKnowledgeFile(file: {
+    filename: string;
+    mime_type: string;
+    content_base64: string;
+  }): Promise<void>;
+
   // The Connections marketplace (r13): connected rows (= connections()) plus the
   // native surfaces available to request. requestConnection records an optimistic
   // request (localStorage in demo) and returns ok.

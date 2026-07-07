@@ -150,6 +150,12 @@ export function disclosureFor(
       };
     }
 
+    // Teaching the agent (r19) is a write to its own knowledge/voice store — not
+    // a send. Its dispatch builds no disclosure (the TeachCard has no gate row),
+    // but the switch stays exhaustive.
+    case 'teach':
+      return { kind: 'control' };
+
     // Help + fallback are pure UI replies (a capability card) — no sends, no
     // gate. They never actually reach here (their dispatch builds no disclosure),
     // but the switch stays exhaustive so a new intent can't silently skip a case.

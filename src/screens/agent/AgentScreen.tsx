@@ -13,7 +13,7 @@
 //               with an inline editor panel. Everything here is folded into the
 //               agent's context.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useClient } from '../../shell/ClientContext.tsx';
 import { useData } from '../../data/useData.ts';
 import { Skeleton, Switch } from '../../components/index.ts';
@@ -138,6 +138,18 @@ function OverviewSegment() {
   const client = useClient();
   const profile = useData(() => client.agentProfile(), [client]);
   const flows = useData(() => client.playbookFlows(), [client]);
+
+  // Live wiring (r19): the identity card's name + traits derive from the voice
+  // store, so a teach intent from Home ("rename the agent to …") must refresh the
+  // Overview too. Refetch the profile on knowledge.changed.
+  useEffect(() => {
+    const unsubscribe = client.subscribe((e) => {
+      if (e.type === 'knowledge.changed') profile.refetch();
+    });
+    return unsubscribe;
+    // profile.refetch is stable; client is the real dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client]);
 
   const onToggleFlow = (key: string, enabled: boolean) => {
     void client.setPlaybookEnabled(key, enabled).then(() => flows.refetch());

@@ -150,6 +150,110 @@ const VOICE_TRAIT_MAX = 6;
 const VOICE_TRAIT_LEN = 60;
 const VOICE_INSTRUCTIONS_LEN = 2000;
 
+// ── File upload (r19) — client-side text parsing, chunk mirroring ────────────
+// Text-like files are read into the doc body; long text is chunked at ~1500 chars
+// into "part N/M" docs, mirroring the platform's chunker. Bodies cap at ~200KB.
+const UPLOAD_TEXT_CAP = 200_000; // ~200KB of decoded text kept
+const UPLOAD_CHUNK_CHARS = 1500; // chunk size mirroring the platform
+// Honest status for binaries in demo mode — no fake extraction; the real parse
+// happens on the platform connection.
+const UPLOAD_BINARY_NOTE = 'Parsed on the platform connection';
+
+// Text-like if the mime is text/* (or empty) OR the extension is .txt/.md/.csv.
+function isTextLike(filename: string, mime: string): boolean {
+  const m = mime.toLowerCase();
+  if (m.startsWith('text/') || m === 'application/json' || m === 'text/csv') return true;
+  if (m && !m.startsWith('text/')) {
+    // A concrete non-text mime (e.g. application/pdf, image/*) → binary.
+    if (m !== 'application/octet-stream') return /\.(txt|md|markdown|csv|log)$/i.test(filename);
+  }
+  return /\.(txt|md|markdown|csv|log)$/i.test(filename);
+}
+
+// Decode a base64 payload to a UTF-8 string, guarded (malformed → empty). Uses
+// atob + TextDecoder so multibyte content survives; no Node Buffer dependency.
+function decodeBase64Utf8(b64: string): string {
+  try {
+    const binary = globalThis.atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return '';
+  }
+}
+
+// The decoded byte length of a base64 payload (for size_bytes), without decoding
+// the whole thing: 3 bytes per 4 base64 chars, minus padding.
+function base64ByteLength(b64: string): number {
+  const clean = b64.replace(/[^A-Za-z0-9+/=]/g, '');
+  if (clean.length === 0) return 0;
+  const padding = clean.endsWith('==') ? 2 : clean.endsWith('=') ? 1 : 0;
+  return Math.max(0, (clean.length * 3) / 4 - padding);
+}
+
+// Stopwords the knowledge matcher ignores so common filler never scores a hit.
+const STOPWORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'if', 'is', 'are', 'was', 'were', 'be',
+  'been', 'do', 'does', 'did', 'you', 'your', 'yours', 'we', 'our', 'us', 'i',
+  'me', 'my', 'they', 'them', 'it', 'to', 'of', 'in', 'on', 'for', 'with', 'at',
+  'by', 'from', 'up', 'about', 'into', 'over', 'after', 'this', 'that', 'these',
+  'those', 'can', 'could', 'would', 'should', 'will', 'have', 'has', 'had', 'get',
+  'got', 'guys', 'guy', 'hey', 'hi', 'hello', 'so', 'just', 'any', 'some', 'what',
+  'when', 'how', 'why', 'who', 'there', 'here', 'yes', 'no', 'ok', 'okay', 'please',
+]);
+
+// The salient tokens of a lowercased string: word tokens ≥3 chars, minus
+// stopwords. A light plural-fold (trailing 's' dropped) so "plans" matches "plan".
+// Deterministic; used by the knowledge matcher for both the query and the docs.
+function salientTokens(lower: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of lower.split(/[^a-z0-9]+/)) {
+    if (raw.length < 3 || STOPWORDS.has(raw)) continue;
+    const folded = raw.length > 3 && raw.endsWith('s') ? raw.slice(0, -1) : raw;
+    out.add(folded);
+  }
+  return out;
+}
+
+// The first sentence of a doc body (for composing a one-sentence answer). Strips
+// a leading list marker ("- ", "• ") so a bulleted rules doc reads cleanly.
+function firstSentence(body: string): string {
+  const one = body.replaceAll(/\s+/g, ' ').trim().replace(/^[-•*]\s*/, '');
+  const m = /^(.+?[.!?])(\s|$)/.exec(one);
+  return (m ? m[1] : one).trim();
+}
+
+// Lowercase the first character of a fact so it reads naturally after "Yes {name},".
+// Preserves an all-caps acronym lead (e.g. "EFT") — only single leading capitals
+// get folded.
+function lowerFirst(s: string): string {
+  if (s.length < 2) return s.toLowerCase();
+  if (s[0] === s[0].toUpperCase() && s[1] === s[1].toLowerCase()) {
+    return s[0].toLowerCase() + s.slice(1);
+  }
+  return s;
+}
+
+// Split text into ~size-char chunks on paragraph/line boundaries where possible,
+// mirroring a simple platform chunker. Never returns an empty array.
+function chunkText(text: string, size: number): string[] {
+  const trimmed = text.trim();
+  if (trimmed.length <= size) return [trimmed];
+  const chunks: string[] = [];
+  let rest = trimmed;
+  while (rest.length > size) {
+    // Prefer a break at the last newline before the cap; else a space; else hard.
+    let cut = rest.lastIndexOf('\n', size);
+    if (cut < size * 0.5) cut = rest.lastIndexOf(' ', size);
+    if (cut < size * 0.5) cut = size;
+    chunks.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest.length > 0) chunks.push(rest);
+  return chunks.length > 0 ? chunks : [trimmed.slice(0, size)];
+}
+
 // The single latency helper. One knob so the whole client feels consistent.
 const LATENCY_MS = 250;
 const delay = <T>(value: T): Promise<T> =>
@@ -276,6 +380,11 @@ export class DemoClient implements DataClient {
   // human explicitly asked for an action. Consumed once the steered suggestion is
   // computed at a rung the ladder would otherwise silence; re-armed on each steer.
   private steerResetArmed = new Set<string>();
+  // Knowledge-driven drafting (r19): the title of the knowledge doc that grounded
+  // the pending held draft on a conversation, if any. suggestion() surfaces it as
+  // a "From your knowledge: {title}" rationale on the held draft. Set when a
+  // knowledge-answer draft is created; cleared when the next draft has no doc hit.
+  private draftKnowledgeSource = new Map<string, string>();
   // Agent flows (r10): tenant-wide playbook on/off state (default all enabled).
   // Absent from the map means "not yet toggled" → enabled. A disabled playbook
   // stops producing drafts/acks in the choreography and drops from the briefing.
@@ -719,7 +828,13 @@ export class DemoClient implements DataClient {
   private appendHeldDraft(t: FixtureThread, inboundText: string, run = 1): FixtureMessage {
     const c = contactById(t.contactId);
     const first = c?.name.split(' ')[0] ?? 'there';
-    const body = this.classifyReplyDraft(c, first, inboundText, run);
+    const { body, sourceTitle } = this.classifyReplyDraft(c, first, inboundText, run);
+    // Remember which knowledge doc (if any) grounded this draft, so suggestion()
+    // can surface a "From your knowledge: {title}" rationale on the held draft.
+    // A knowledge hit is keyed by conversation and cleared when no doc matched, so
+    // deleting the FAQ and re-simulating flips the rationale off (round-trips).
+    if (sourceTitle) this.draftKnowledgeSource.set(t.conversationId, sourceTitle);
+    else this.draftKnowledgeSource.delete(t.conversationId);
     const m: FixtureMessage = {
       id: `msg_draft_${t.messages.length + 1}_${t.conversationId}`,
       direction: 'outbound',
@@ -759,7 +874,7 @@ export class DemoClient implements DataClient {
     first: string,
     inboundText: string,
     run: number,
-  ): string {
+  ): { body: string; sourceTitle?: string } {
     const raw = inboundText.trim();
     const text = raw.toLowerCase();
     const has = (...needles: string[]): boolean => needles.some((n) => text.includes(n));
@@ -772,6 +887,8 @@ export class DemoClient implements DataClient {
     // 1) Frustration / confusion → de-escalate, own it, offer the human. No
     //    exclamation marks in a de-escalation; no question stacking beyond one. On
     //    a run it leads with a caught-up acknowledgement instead of a second sorry.
+    //    Tone tiers run FIRST — an angry outburst is answered with de-escalation,
+    //    not an FAQ paste, even if a knowledge keyword happens to appear.
     if (
       has('wtf', 'wth', 'ridiculous', 'unacceptable', 'frustrat', 'angry', 'annoyed', 'confus', 'terrible', 'useless') ||
       /\?\?|!!/.test(raw) ||
@@ -780,13 +897,13 @@ export class DemoClient implements DataClient {
       const lead = isRun
         ? `Sorry ${first}, we're on it and I don't want to leave you hanging.`
         : `Sorry for the confusion, ${first}.`;
-      return `${lead} Tom can give you a straight answer today, want him to call you this afternoon?`;
+      return { body: `${lead} Tom can give you a straight answer today, want him to call you this afternoon?` };
     }
 
     // 2) Bare greeting → friendly, brief, one open question.
     const greetingOnly = /^(hey+|hi+|hello+|yo+|hiya|heya)[!.\s]*$/.test(text);
     if (greetingOnly) {
-      return `${runPrefix}Hey ${first}! What can we help with?`;
+      return { body: `${runPrefix}Hey ${first}! What can we help with?` };
     }
 
     // 3) Thanks / positive → warm close, NO question. Matchers are word-anchored
@@ -796,8 +913,16 @@ export class DemoClient implements DataClient {
       /\bthx\b|\bty\b/.test(text) ||
       /^(ok|okay|great|awesome|cool|perfect)[!.\s]*$/.test(text)
     ) {
-      return `${runPrefix}Anytime, ${first}. We're here when you need us.`;
+      return { body: `${runPrefix}Anytime, ${first}. We're here when you need us.` };
     }
+
+    // 3.5) KNOWLEDGE ANSWER (r19) — before the generic content tiers. A keyword
+    //      match against the taught FAQ / company / rules docs lets the draft
+    //      ANSWER FROM THE DOC in voice canon (affirmation + the doc's key fact
+    //      trimmed to one sentence + one question), never a raw paste. Editing the
+    //      FAQ body in the Knowledge tab changes what appears here — it round-trips.
+    const knowledge = this.knowledgeAnswer(text, first, runPrefix);
+    if (knowledge) return knowledge;
 
     // 4) Scheduling words → propose a concrete slot via the booking connection +
     //    memory (after-6pm etc.). One time offer, one question.
@@ -805,22 +930,89 @@ export class DemoClient implements DataClient {
       const afterSix =
         (c?.memory ?? []).some((m) => /after 6pm|evening/i.test(m.value));
       const slot = afterSix ? 'Thursday at 6:30' : 'Thursday at 2';
-      return `${runPrefix}Happy to set that up, ${first}. Tom has ${slot} open, does that work for you?`;
+      return { body: `${runPrefix}Happy to set that up, ${first}. Tom has ${slot} open, does that work for you?` };
     }
 
-    // 5) Price / renewal / rate question → the renewal-grounded reply.
+    // 5) Price / renewal / rate question → the renewal-grounded reply. A HOUSE
+    //    RULE about offering a call before quoting numbers (r19) biases the copy:
+    //    when the rule is present we make the call the offer; deleting that rule
+    //    softens it to pulling the rate without pushing the call. This reads the
+    //    linkage from the rules doc, so removing the rule visibly changes behavior.
     if (has('price', 'cost', 'premium', 'rate', 'renew', 'quote', 'how much')) {
-      return `${runPrefix}Good question on the numbers, ${first}. Tom can pull your latest rate today, want a quick call this week to run through it?`;
+      const body = this.rulesFavorCallBeforeQuote()
+        ? `${runPrefix}Good question on the numbers, ${first}. Tom can pull your latest rate today, want a quick call this week to run through it?`
+        : `${runPrefix}Good question on the numbers, ${first}. Tom can pull your latest rate and text it right over.`;
+      return { body };
     }
 
     // 6) Coverage / limits question → non-advisory, Tom-will-advise.
     if (has('coverage', 'limit', 'liability', 'deductible', 'covered', 'covers', 'policy')) {
-      return `${runPrefix}Great question, ${first}. Tom can walk you through what fits your situation, want a quick call this week to go over it?`;
+      return { body: `${runPrefix}Great question, ${first}. Tom can walk you through what fits your situation, want a quick call this week to go over it?` };
     }
 
     // 7) Default → a grounded acknowledgement that QUOTES their actual words,
     //    never the old generic "good question!" for a non-question.
-    return `${runPrefix}On "${this.trim(raw, 48)}", let me get you a real answer, ${first}. Tom can confirm the details today.`;
+    return { body: `${runPrefix}On "${this.trim(raw, 48)}", let me get you a real answer, ${first}. Tom can confirm the details today.` };
+  }
+
+  // ── Knowledge-driven drafting (r19) ─────────────────────────────────────────
+  // Score the taught FAQ / company / rules docs against the inbound and, on a
+  // confident hit, compose an answer IN VOICE from the winning doc. Deterministic
+  // keyword scoring (no deps): tokens from the doc title weigh most, salient body
+  // tokens next; the inbound's own tokens are the query. A hit must clear a small
+  // threshold so an unrelated inbound never triggers a knowledge answer. The
+  // composed body is affirmation + the doc's key fact (its first sentence, trimmed
+  // to ≤1 sentence) + one question — NEVER the raw doc. Returns the composed body
+  // plus the doc title (for the "From your knowledge" rationale), or null.
+  private knowledgeAnswer(
+    lowerInbound: string,
+    first: string,
+    runPrefix: string,
+  ): { body: string; sourceTitle: string } | null {
+    const queryTokens = salientTokens(lowerInbound);
+    if (queryTokens.size === 0) return null;
+
+    const docs = this.readBrainStore().docs.filter(
+      (d) => d.kind === 'faq' || d.kind === 'company' || d.kind === 'rules',
+    );
+    let best: { doc: KnowledgeDoc; score: number } | null = null;
+    for (const doc of docs) {
+      const titleTokens = salientTokens(doc.title.toLowerCase());
+      const bodyTokens = salientTokens(doc.body.toLowerCase());
+      let score = 0;
+      for (const q of queryTokens) {
+        if (titleTokens.has(q)) score += 3; // a title-token overlap is the strongest signal
+        else if (bodyTokens.has(q)) score += 1;
+      }
+      if (score > 0 && (best === null || score > best.score)) best = { doc, score };
+    }
+    // Threshold: need at least a title-token overlap (score ≥3) or two body
+    // overlaps (score ≥2) so a single incidental word never answers from a doc.
+    if (!best || best.score < 2) return null;
+
+    const fact = firstSentence(best.doc.body);
+    if (!fact) return null;
+    // Compose: affirmation + the doc's key fact trimmed to one sentence + one
+    // question, in voice canon (warm, ≤2 sentences, no em dashes). We never paste
+    // the raw doc; `fact` is its lead sentence, lightly trimmed.
+    // Strip a leading affirmation from the doc itself ("Yes, ..." / "Yes we...")
+    // so the composed "Yes {name}, ..." never doubles it ("Yes Dana, yes, ...").
+    const deduped = fact.replace(/^yes[,!.]?\s+/i, '');
+    const trimmedFact = this.trim(deduped, 150);
+    const body = `${runPrefix}Yes ${first}, ${lowerFirst(trimmedFact)} Want Tom to set that up on your policy?`;
+    return { body, sourceTitle: best.doc.title };
+  }
+
+  // True when a house rule tells the agent to offer a CALL before quoting numbers.
+  // The price tier reads this so DELETING the rule visibly changes the draft (the
+  // call offer softens to a text-the-rate line). Scans the rules docs' bodies for
+  // the "call before quot(e/ing)" intent — resilient to light rewording.
+  private rulesFavorCallBeforeQuote(): boolean {
+    const rules = this.readBrainStore().docs.filter((d) => d.kind === 'rules');
+    return rules.some((d) => {
+      const b = d.body.toLowerCase();
+      return b.includes('call') && (b.includes('quot') || b.includes('number') || b.includes('price'));
+    });
   }
 
   // Resume via START restores transactional consent only; marketing stays
@@ -1004,6 +1196,9 @@ export class DemoClient implements DataClient {
   // supersedes them). Deletes rather than re-statuses so no orphan bubble lingers.
   private clearHeldDrafts(t: FixtureThread): void {
     t.messages = t.messages.filter((m) => m.status !== 'awaiting_approval');
+    // The pending draft is gone → drop any knowledge-source tag for it (r19), so a
+    // stale "From your knowledge" rationale never outlives the draft it described.
+    this.draftKnowledgeSource.delete(t.conversationId);
   }
 
   // Ask the customer for a document photo, then simulate them replying with a
@@ -2208,6 +2403,10 @@ export class DemoClient implements DataClient {
     const heldDraft = [...t.messages].reverse().find((m) => m.status === 'awaiting_approval');
     if (heldDraft) {
       const rationale = this.rationaleFor(c, hasMem);
+      // Knowledge-driven drafts cite the doc they answered from (r19), so the
+      // operator sees the training pay off. Prepended above the data reasons.
+      const knowledgeSource = this.draftKnowledgeSource.get(conversationId);
+      if (knowledgeSource) rationale.unshift(`From your knowledge: ${knowledgeSource}`);
       if (steer) rationale.unshift(this.steerRationale(steer.goal));
       return delay({
         body: heldDraft.body,
@@ -2849,6 +3048,9 @@ export class DemoClient implements DataClient {
     store.voice = next;
     this.writeBrainStore(store);
     this.appendAudit('owner', 'agent_voice_updated', Object.keys(patch).join(','));
+    // The brain changed → any mounted surface (Agent → Voice/Overview, Home
+    // briefing) refetches on this event, so training round-trips live.
+    this.emit({ type: 'knowledge.changed' });
     return delay({ ...next, traits: [...next.traits] });
   }
 
@@ -2874,6 +3076,7 @@ export class DemoClient implements DataClient {
     store.docs.push(created);
     this.writeBrainStore(store);
     this.appendAudit('owner', 'knowledge_created', `${created.kind}:${created.id}`);
+    this.emit({ type: 'knowledge.changed' });
     return delay({ ...created });
   }
 
@@ -2889,6 +3092,7 @@ export class DemoClient implements DataClient {
     doc.updated_at = this.stamp();
     this.writeBrainStore(store);
     this.appendAudit('owner', 'knowledge_updated', id);
+    this.emit({ type: 'knowledge.changed' });
     return delay({ ...doc });
   }
 
@@ -2897,6 +3101,63 @@ export class DemoClient implements DataClient {
     store.docs = store.docs.filter((d) => d.id !== id);
     this.writeBrainStore(store);
     this.appendAudit('owner', 'knowledge_deleted', id);
+    this.emit({ type: 'knowledge.changed' });
+    return delay(undefined);
+  }
+
+  // ── File upload into the Files group (r19) ──────────────────────────────────
+  // The UI hands us { filename, mime_type, content_base64 } — it has already read
+  // the file. We mirror the platform's pipeline deterministically:
+  //   - text-like files (text/* mime, or a .txt/.md/.csv extension) → decode the
+  //     base64, cap at ~200KB, and store the REAL content as the doc body. Long
+  //     text is chunked into "{name} · part N/M" docs at ~1500 chars, mirroring the
+  //     platform's chunker, so the agent drafts from the actual file content.
+  //   - binaries (PDF etc.) → store metadata only with an honest status line
+  //     "Parsed on the platform connection" (no fake extraction in demo mode).
+  // One or more `file` KnowledgeDocs are created; a single knowledge.changed fires
+  // at the end so the Files group refetches once for the whole upload.
+  uploadKnowledgeFile(file: {
+    filename: string;
+    mime_type: string;
+    content_base64: string;
+  }): Promise<void> {
+    const store = this.readBrainStore();
+    const isText = isTextLike(file.filename, file.mime_type);
+    const size = base64ByteLength(file.content_base64);
+
+    if (isText) {
+      const decoded = decodeBase64Utf8(file.content_base64).slice(0, UPLOAD_TEXT_CAP);
+      const chunks = chunkText(decoded, UPLOAD_CHUNK_CHARS);
+      const total = chunks.length;
+      chunks.forEach((chunk, i) => {
+        const title = total > 1 ? `${file.filename} · part ${i + 1}/${total}` : file.filename;
+        store.docs.push({
+          id: this.nextKnowledgeId(),
+          kind: 'file',
+          title,
+          body: chunk,
+          filename: file.filename,
+          size_bytes: size,
+          updated_at: this.stamp(),
+        });
+      });
+      this.appendAudit('owner', 'knowledge_uploaded', `text:${file.filename}:${total}`);
+    } else {
+      // Binary — metadata only, honest about where parsing happens.
+      store.docs.push({
+        id: this.nextKnowledgeId(),
+        kind: 'file',
+        title: file.filename,
+        body: UPLOAD_BINARY_NOTE,
+        filename: file.filename,
+        size_bytes: size,
+        updated_at: this.stamp(),
+      });
+      this.appendAudit('owner', 'knowledge_uploaded', `binary:${file.filename}`);
+    }
+
+    this.writeBrainStore(store);
+    this.emit({ type: 'knowledge.changed' });
     return delay(undefined);
   }
 

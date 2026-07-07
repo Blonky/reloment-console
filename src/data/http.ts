@@ -472,6 +472,19 @@ export class HttpClient implements DataClient {
     }).catch(() => undefined);
   }
 
+  // Upload a file (r19). The UI has already read the file into base64; we POST
+  // { filename, mime_type, content_base64 } to /api/knowledge/upload, where the
+  // platform decodes, parses (binaries), and chunks (long text) into `file` docs
+  // and emits knowledge.changed on its stream. A missing/failing route degrades to
+  // a silent no-op so the optimistic UI stands until the next knowledgeDocs() read.
+  async uploadKnowledgeFile(file: {
+    filename: string;
+    mime_type: string;
+    content_base64: string;
+  }): Promise<void> {
+    await this.post<{ ok: boolean }>('/api/knowledge/upload', file).catch(() => undefined);
+  }
+
   // The Connections marketplace — GET the catalog; POST a request. A missing
   // catalog route degrades to just the connected rows with an empty available
   // list; a failing request resolves ok so the optimistic UI stands.

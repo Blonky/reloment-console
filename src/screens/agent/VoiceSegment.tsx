@@ -165,6 +165,19 @@ export default function VoiceSegment() {
     wispTimer.current = setTimeout(() => setSaved(false), WISP_MS);
   }, []);
 
+  // Live wiring (r19): a teach intent from Home ("rename the agent to …", "add
+  // trait …", "set instructions: …") mutates the voice store and emits
+  // knowledge.changed. Refetch on it so the name/traits/house-style update here
+  // with no manual reload; the voice.data effect above resyncs the working copy.
+  useEffect(() => {
+    const unsubscribe = client.subscribe((e) => {
+      if (e.type === 'knowledge.changed') voice.refetch();
+    });
+    return unsubscribe;
+    // voice.refetch is stable; client is the real dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client]);
+
   // Persist a partial patch, then refetch so the derived example + traits agree
   // with the store (proves training changed the agent).
   const persist = useCallback(

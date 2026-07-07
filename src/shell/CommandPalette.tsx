@@ -151,6 +151,13 @@ const IconHelp = (
   </Svg>
 );
 
+const IconTeach = (
+  <Svg>
+    <path d="M8 2 1.5 5.5 8 9l6.5-3.5L8 2z" />
+    <path d="M4 7v3c0 .8 1.8 1.7 4 1.7s4-.9 4-1.7V7" />
+  </Svg>
+);
+
 // ── Item model ────────────────────────────────────────────────────────────────
 type PaletteItem = {
   id: string;
@@ -178,6 +185,7 @@ const ITEMS: PaletteItem[] = [
   { id: 'cmd-brief', kind: 'command', phrase: 'Brief me on Dana', label: 'Brief me on Dana', group: 'Commands', icon: IconBrief, keywords: 'brief contact story background dana memory consent' },
   { id: 'cmd-research', kind: 'command', phrase: 'Research Dana', label: 'Research a contact', group: 'Commands', icon: IconResearch, keywords: 'research enrich enrichment waterfall lookup dig contact book carrier web dana' },
   { id: 'cmd-navigate', kind: 'command', phrase: 'Take me to the Inbox', label: 'Take me to the Inbox', group: 'Commands', icon: IconNavigate, keywords: 'navigate take me to open go jump inbox contacts agent insights settings' },
+  { id: 'cmd-teach', kind: 'command', phrase: 'Add a house rule: always mention our office hours', label: 'Teach the agent…', group: 'Commands', icon: IconTeach, keywords: 'teach train house rule faq trait rename instructions knowledge add' },
   { id: 'cmd-pause', kind: 'command', phrase: 'Pause all sending', label: 'Pause all sending', group: 'Commands', icon: IconPause, keywords: 'kill switch stop halt freeze emergency pause everything' },
   { id: 'cmd-resume', kind: 'command', phrase: 'Resume sending', label: 'Resume sending', group: 'Commands', icon: IconResume, keywords: 'unpause resume start again re-enable clear' },
   { id: 'cmd-help', kind: 'command', phrase: 'Help', label: 'What can you do', group: 'Commands', icon: IconHelp, keywords: 'help commands capabilities what can you do how does this work catalogue' },

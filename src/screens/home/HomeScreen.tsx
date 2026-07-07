@@ -35,7 +35,7 @@ import { useLiveData } from '../../shell/LiveData.tsx';
 import { useData } from '../../data/useData.ts';
 import type { Contact } from '../../data/types.ts';
 import styles from './HomeScreen.module.css';
-import { parseIntent } from './parseIntent.ts';
+import { parseIntent, smellsLikeComplianceOverride } from './parseIntent.ts';
 import type { Intent } from './parseIntent.ts';
 import {
   BookCard,
@@ -51,6 +51,7 @@ import {
   NavigateMissReply,
   HelpCard,
   FallbackCard,
+  TeachCard,
 } from './ReplyCards.tsx';
 import type { ReplyMeta } from './ReplyCards.tsx';
 import { disclosureFor } from './gateChecks.ts';
@@ -128,6 +129,8 @@ function thinkingLabel(intent: Intent): string {
       return 'Running the enrichment waterfall…';
     case 'navigate':
       return 'Finding where to take you…';
+    case 'teach':
+      return 'Teaching the agent…';
     case 'pause':
     case 'resume':
       return 'Preparing the confirmation…';
@@ -551,6 +554,65 @@ export default function HomeScreen() {
           return {
             node: <NavigateCard label={target.label} href={target.href} />,
             narration: `Taking you to ${target.label}.`,
+          };
+        }
+        case 'teach': {
+          // Write to the agent's brain via the existing methods. add_rule/add_faq
+          // → createKnowledgeDoc; rename_agent/add_trait/set_instructions →
+          // updateAgentVoice. The knowledge.changed event (emitted by the client)
+          // refreshes the Agent tab + briefing live; refreshLive() nudges Home too.
+          const compliance = smellsLikeComplianceOverride(
+            `${intent.title ?? ''} ${intent.body ?? ''}`,
+          );
+          let where = 'House rules';
+          if (intent.op === 'add_rule') {
+            await client.createKnowledgeDoc({
+              kind: 'rules',
+              title: intent.title ?? 'New house rule',
+              body: intent.body ?? intent.title ?? '',
+            });
+            where = 'House rules';
+          } else if (intent.op === 'add_faq') {
+            await client.createKnowledgeDoc({
+              kind: 'faq',
+              title: intent.title ?? 'New question',
+              body: intent.body ?? intent.title ?? '',
+            });
+            where = 'FAQs';
+          } else if (intent.op === 'rename_agent') {
+            await client.updateAgentVoice({ name: intent.title ?? '' });
+            where = 'Voice';
+          } else if (intent.op === 'add_trait') {
+            const voice = await client.agentVoice();
+            const next = [...voice.traits, intent.title ?? ''].filter(Boolean);
+            await client.updateAgentVoice({ traits: next });
+            where = 'Voice';
+          } else {
+            // set_instructions — APPEND to the existing house style (never clobber).
+            const voice = await client.agentVoice();
+            const addition = intent.title ?? '';
+            const joined = voice.instructions.trim()
+              ? `${voice.instructions.trim()}\n${addition}`
+              : addition;
+            await client.updateAgentVoice({ instructions: joined });
+            where = 'Voice';
+          }
+          refreshLive();
+          const confirm =
+            intent.op === 'rename_agent'
+              ? `Renamed your agent to ${intent.title}.`
+              : intent.op === 'add_faq'
+                ? 'Added to FAQs.'
+                : intent.op === 'add_trait'
+                  ? 'Added to your agent’s traits.'
+                  : intent.op === 'set_instructions'
+                    ? 'Added to your House style.'
+                    : 'Added to House rules.';
+          return {
+            node: <TeachCard confirm={confirm} where={where} compliance={compliance} />,
+            narration: compliance
+              ? `${confirm} House rules shape tone and approach; the compliance guardrails are not editable.`
+              : confirm,
           };
         }
         case 'pause': {

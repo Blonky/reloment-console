@@ -179,6 +179,17 @@ export function IconCheck({ size = 16 }: IconProps) {
   return svg(size, <polyline points="4 12 9 17 20 6" />);
 }
 
+// Teach — a graduation cap (learning / training the agent).
+export function IconTeach({ size = 16 }: IconProps) {
+  return svg(size, (
+    <>
+      <path d="M12 4 2 9l10 5 10-5-10-5z" />
+      <path d="M6 11.5V16c0 1 2.7 2.5 6 2.5s6-1.5 6-2.5v-4.5" />
+      <path d="M22 9v4" />
+    </>
+  ));
+}
+
 export function IconSend({ size = 16 }: IconProps) {
   return svg(size, (
     <>

@@ -15,22 +15,35 @@ import styles from './KnowledgeSegment.module.css';
 const CAPTION =
   "Everything here is folded into your agent's context — it drafts with what you teach it.";
 
+// The honest status a binary file carries in demo mode (mirrors the client). A
+// file doc whose body is this string was NOT parsed here — the real parse runs on
+// the platform connection. Text files carry their real content instead.
+const BINARY_NOTE = 'Parsed on the platform connection';
+
 const GROUPS: { kind: KnowledgeKind; label: string; empty: string }[] = [
   { kind: 'company', label: 'Company', empty: 'Nothing here yet — the agent works from your book alone.' },
   { kind: 'rules', label: 'House rules', empty: 'Nothing here yet — the agent works from your book alone.' },
   { kind: 'faq', label: 'FAQs', empty: 'Nothing here yet — the agent works from your book alone.' },
-  { kind: 'file', label: 'Files', empty: 'No files indexed yet.' },
-];
-
-// A demo "Add file" affordance — records a filename + size (no real upload). The
-// entries cycle so repeated adds are distinct and deterministic.
-const DEMO_FILES: { filename: string; size_bytes: number }[] = [
-  { filename: 'Auto-coverage-guide.pdf', size_bytes: 412_880 },
-  { filename: 'Home-endorsements.pdf', size_bytes: 298_140 },
-  { filename: 'Carrier-appetite-2026.xlsx', size_bytes: 76_400 },
+  { kind: 'file', label: 'Files', empty: 'Drop a file here, or use Add file. Text files are read in; PDFs are parsed on the platform connection.' },
 ];
 
 const WISP_MS = 1600;
+
+// Read a File to a base64 payload (no data-URL prefix) for uploadKnowledgeFile.
+// Resolves to null on read failure so the caller can skip it quietly.
+function fileToBase64(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') return resolve(null);
+      const comma = result.indexOf(',');
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
 
 function formatBytes(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} MB`;
@@ -100,7 +113,11 @@ function DocEditor({
 
       {isFile && (
         <p className={styles.fileMeta}>
-          <span className={styles.indexedPill}>Indexed</span>
+          {doc.body === BINARY_NOTE ? (
+            <span className={styles.platformPill}>Parsed on the platform connection</span>
+          ) : (
+            <span className={styles.indexedPill}>Read in</span>
+          )}
           {doc.filename}
           {doc.size_bytes !== undefined ? ` · ${formatBytes(doc.size_bytes)}` : ''}
         </p>
@@ -155,8 +172,10 @@ export default function KnowledgeSegment() {
   const docs = useData(() => client.knowledgeDocs(), [client]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const wispTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fileSeq = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(
     () => () => {
@@ -171,27 +190,60 @@ export default function KnowledgeSegment() {
     wispTimer.current = setTimeout(() => setSaved(false), WISP_MS);
   }, []);
 
+  // Live wiring (r19): refetch the doc list whenever the brain changes — an upload
+  // finishing, a Home teach intent, or a mutation in another tab. Cheap: one
+  // subscription that only refetches on knowledge.changed while this segment is
+  // mounted, so a taught doc appears here with no manual reload.
+  useEffect(() => {
+    const unsubscribe = client.subscribe((e) => {
+      if (e.type === 'knowledge.changed') docs.refetch();
+    });
+    return unsubscribe;
+    // docs.refetch is stable; client is the only real dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client]);
+
   const list = docs.data;
 
   const selected = list?.find((d) => d.id === selectedId) ?? null;
 
+  // Read each dropped/picked file client-side and upload it. Text-like files land
+  // with their real content as the body (chunked when long); binaries record
+  // metadata with the honest "Parsed on the platform connection" status. The
+  // knowledge.changed event refetches the list; we also select the newest file so
+  // the operator sees it land. Runs sequentially so ids/stamps stay ordered.
+  const uploadFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      setUploading(true);
+      try {
+        for (const file of files) {
+          const content_base64 = await fileToBase64(file);
+          if (content_base64 === null) continue;
+          await client.uploadKnowledgeFile({
+            filename: file.name,
+            mime_type: file.type,
+            content_base64,
+          });
+        }
+        flashSaved();
+        const after = await client.knowledgeDocs();
+        const newestFile = [...after].reverse().find((d) => d.kind === 'file');
+        if (newestFile) setSelectedId(newestFile.id);
+        docs.refetch();
+      } finally {
+        setUploading(false);
+      }
+    },
+    // docs.refetch / flashSaved are stable; client is the real dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [client],
+  );
+
   const addDoc = (kind: KnowledgeKind) => {
     if (kind === 'file') {
-      const pick = DEMO_FILES[fileSeq.current % DEMO_FILES.length];
-      fileSeq.current += 1;
-      void client
-        .createKnowledgeDoc({
-          kind: 'file',
-          title: pick.filename,
-          body: '',
-          filename: pick.filename,
-          size_bytes: pick.size_bytes,
-        })
-        .then((created) => {
-          flashSaved();
-          setSelectedId(created.id);
-          docs.refetch();
-        });
+      // Open the OS file picker — the drop zone and this button share the path.
+      fileInputRef.current?.click();
       return;
     }
     const seed: Record<Exclude<KnowledgeKind, 'file'>, { title: string }> = {
@@ -232,19 +284,66 @@ export default function KnowledgeSegment() {
         <div className={styles.list}>
           {GROUPS.map((group) => {
             const groupDocs = list.filter((d) => d.kind === group.kind);
+            const isFileGroup = group.kind === 'file';
+            // The Files group is a real drop zone: highlight on dragover (hairline
+            // accent), accept a drop or an Escape to cancel, and label for AT.
+            const dropProps = isFileGroup
+              ? {
+                  onDragOver: (e: React.DragEvent) => {
+                    e.preventDefault();
+                    if (!dragOver) setDragOver(true);
+                  },
+                  onDragLeave: (e: React.DragEvent) => {
+                    // Only clear when leaving the section, not its children.
+                    if (e.currentTarget === e.target) setDragOver(false);
+                  },
+                  onDrop: (e: React.DragEvent) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    const files = Array.from(e.dataTransfer?.files ?? []);
+                    void uploadFiles(files);
+                  },
+                  onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.key === 'Escape' && dragOver) setDragOver(false);
+                  },
+                  'aria-label': 'Files — drop files here to teach your agent',
+                }
+              : {};
             return (
-              <section key={group.kind} className={styles.group}>
+              <section
+                key={group.kind}
+                className={`${styles.group} ${
+                  isFileGroup && dragOver ? styles.groupDropActive : ''
+                }`}
+                {...dropProps}
+              >
                 <div className={styles.groupHead}>
                   <span className={styles.groupLabel}>{group.label}</span>
                   <button
                     type="button"
                     className={styles.addBtn}
                     onClick={() => addDoc(group.kind)}
+                    disabled={isFileGroup && uploading}
                   >
                     <PlusGlyph />
-                    {group.kind === 'file' ? 'Add file' : 'Add'}
+                    {isFileGroup ? (uploading ? 'Uploading…' : 'Add file') : 'Add'}
                   </button>
                 </div>
+                {isFileGroup && (
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className={styles.fileInputHidden}
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files ?? []);
+                      void uploadFiles(files);
+                      e.target.value = ''; // allow re-picking the same file
+                    }}
+                    aria-hidden="true"
+                    tabIndex={-1}
+                  />
+                )}
                 {groupDocs.length === 0 ? (
                   <p className={styles.groupEmpty}>{group.empty}</p>
                 ) : (
@@ -260,10 +359,16 @@ export default function KnowledgeSegment() {
                       <span className={styles.docTitle}>{d.title}</span>
                       <span className={styles.docPreview}>
                         {d.kind === 'file' ? (
-                          <>
-                            <span className={styles.indexedTag}>Indexed</span>
-                            {d.filename}
-                          </>
+                          d.body === BINARY_NOTE ? (
+                            <span className={styles.platformNote}>
+                              Parsed on the platform connection
+                            </span>
+                          ) : (
+                            <>
+                              <span className={styles.indexedTag}>Read in</span>
+                              {oneLine(d.body)}
+                            </>
+                          )
                         ) : (
                           oneLine(d.body)
                         )}

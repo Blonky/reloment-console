@@ -87,7 +87,14 @@ export type FeedEvent =
   | { type: 'playbook.toggled'; key: string; enabled: boolean }
   // Fires after ANY message lands (or the toggle/consent changes) so the UI
   // refetches suggestion() — the agent's next-best message regenerates each turn.
-  | { type: 'suggestion.updated'; conversationId: string };
+  | { type: 'suggestion.updated'; conversationId: string }
+  // Agent brain (r19): fires on ANY knowledge/voice mutation — a doc created /
+  // edited / deleted, a file uploaded, a teach intent, or a voice patch. Surfaces
+  // that render the brain (Agent → Knowledge / Voice, the Overview identity card,
+  // the Home briefing) refetch on it, so teaching visibly round-trips live with no
+  // manual reload. The platform emits the same event on its /api/knowledge +
+  // /api/agent/voice writes.
+  | { type: 'knowledge.changed' };
 
 // ── Steering (r10) — the human asks the agent to work toward a goal ─────────
 // A per-conversation steer the producer sets on a live thread. The suggestion
