@@ -2,20 +2,26 @@
    PROOF (hero + chart + the receipt ledger) → WORK (a hairline stat band) →
    PIPELINE (three quiet columns). A definite-height flex column; the ledger is
    the only flex/scroll region, so the page itself never scrolls at desktop. */
+/* Bounded to exactly one viewport (topbar + the shell's 40px×2 content padding).
+   NOT flex:1 — that sets flex-basis:0% which overrides `height`, letting the page
+   grow to content and scroll the document. An explicit height + overflow:hidden
+   makes the ledger (flex:1) the sole absorber, so the page itself never scrolls. */
 .page {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  flex: 1;
+  gap: 16px;
   min-height: 0;
   height: calc(100vh - var(--topbar-h) - 80px);
+  overflow: hidden;
 }
 
-/* Below 760px tall: graceful page scroll — never clip. */
-@media (max-height: 759px) {
+/* Only genuinely short viewports (rare on desktop) fall back to a graceful
+   document scroll so the fixed bands are never clipped. */
+@media (max-height: 679px) {
   .page {
     height: auto;
     min-height: calc(100vh - var(--topbar-h) - 80px);
+    overflow: visible;
   }
 }
 
@@ -63,12 +69,12 @@
 
 /* Cap the SVG height so the chart card never eats the viewport (§6). */
 .chartWrap {
-  max-height: 200px;
+  max-height: 176px;
   display: flex;
 }
 
 .chartWrap :global(svg) {
-  max-height: 200px;
+  max-height: 176px;
 }
 
 /* ── the receipt: outcome ledger ──────────────────────────────────────────── */
