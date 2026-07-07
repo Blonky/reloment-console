@@ -43,6 +43,11 @@ import type {
 export class HttpClient implements DataClient {
   readonly mode = 'http' as const;
 
+  // Optional bearer-token auth (default OFF). The backend enables it only when it
+  // sets API_AUTH_TOKEN; a real install then sets VITE_API_TOKEN to match. When
+  // unset (the default, incl. the demo) we send nothing — behavior unchanged.
+  private readonly authToken = import.meta.env.VITE_API_TOKEN;
+
   now(): number {
     return Date.now();
   }
@@ -51,6 +56,16 @@ export class HttpClient implements DataClient {
     private readonly baseUrl: string,
     private readonly tenantId: string,
   ) {}
+
+  // The tenant identity card — GET /api/tenant → { name, line } (line pre-
+  // formatted for display). A missing/failing route degrades to a NEUTRAL
+  // placeholder, never Hartley: a real install must never show the demo tenant.
+  async tenant(): Promise<{ name: string; line: string }> {
+    return this.req<{ name: string; line: string }>('/api/tenant').catch(() => ({
+      name: '—',
+      line: '',
+    }));
+  }
 
   // ── Live event feed (provider SSE feed) ─────────────────────────────────────
   // Connect an EventSource to the provider's stream lazily on the first
@@ -74,8 +89,14 @@ export class HttpClient implements DataClient {
     if (this.eventSource) return;
     try {
       const base = this.baseUrl.replace(/\/$/, '');
-      const since = this.lastEventAt ? `?since=${encodeURIComponent(this.lastEventAt)}` : '';
-      const es = new EventSource(`${base}/api/v1/events/stream${since}`);
+      // The browser can't attach the x-tenant-id header to an EventSource, so the
+      // tenant travels as a query param the backend reads instead. ?since resumes
+      // the feed; ?token authenticates when optional bearer auth is enabled.
+      const params = new URLSearchParams({ tenant: this.tenantId });
+      if (this.lastEventAt) params.set('since', this.lastEventAt);
+      if (this.authToken) params.set('token', this.authToken);
+      const es = new EventSource(`${base}/api/v1/events/stream?${params.toString()}`);
+
       // provider SSE feed: `message.received` carries an inbound ThreadMessage.
       es.addEventListener('message.received', (ev: MessageEvent<string>) => {
         try {
@@ -94,6 +115,149 @@ export class HttpClient implements DataClient {
           // Malformed frame — ignore rather than tear the stream down.
         }
       });
+
+      // The rest of the live vocabulary. Each frame carries { at? } for resume; we
+      // map it to the matching FeedEvent (only names present in the union) so the
+      // live surfaces refresh. Every parse is guarded — one malformed frame must
+      // not tear the stream down.
+      es.addEventListener('message.sent', (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data) as {
+            conversationId: string;
+            message: ThreadMessage;
+            at?: string;
+          };
+          if (data.at) this.lastEventAt = data.at;
+          this.emit({
+            type: 'message.sent',
+            conversationId: data.conversationId,
+            message: data.message,
+          });
+        } catch {
+          // Malformed frame — ignore.
+        }
+      });
+
+      es.addEventListener('draft.created', (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data) as {
+            conversationId: string;
+            message: ThreadMessage;
+            at?: string;
+          };
+          if (data.at) this.lastEventAt = data.at;
+          this.emit({
+            type: 'draft.created',
+            conversationId: data.conversationId,
+            message: data.message,
+          });
+        } catch {
+          // Malformed frame — ignore.
+        }
+      });
+
+      es.addEventListener('suggestion.updated', (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data) as { conversationId: string; at?: string };
+          if (data.at) this.lastEventAt = data.at;
+          this.emit({ type: 'suggestion.updated', conversationId: data.conversationId });
+        } catch {
+          // Malformed frame — ignore.
+        }
+      });
+
+      es.addEventListener('steer.changed', (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data) as { conversationId: string; at?: string };
+          if (data.at) this.lastEventAt = data.at;
+          this.emit({ type: 'steer.changed', conversationId: data.conversationId });
+        } catch {
+          // Malformed frame — ignore.
+        }
+      });
+
+      es.addEventListener('agent.toggled', (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data) as {
+            conversationId: string;
+            enabled: boolean;
+            at?: string;
+          };
+          if (data.at) this.lastEventAt = data.at;
+          this.emit({
+            type: 'agent.toggled',
+            conversationId: data.conversationId,
+            enabled: data.enabled,
+          });
+        } catch {
+          // Malformed frame — ignore.
+        }
+      });
+
+      es.addEventListener('playbook.toggled', (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data) as {
+            key: string;
+            enabled: boolean;
+            at?: string;
+          };
+          if (data.at) this.lastEventAt = data.at;
+          this.emit({ type: 'playbook.toggled', key: data.key, enabled: data.enabled });
+        } catch {
+          // Malformed frame — ignore.
+        }
+      });
+
+      es.addEventListener('consent.changed', (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data) as {
+            conversationId: string;
+            contactId: string;
+            optedOut: boolean;
+            at?: string;
+          };
+          if (data.at) this.lastEventAt = data.at;
+          this.emit({
+            type: 'consent.changed',
+            conversationId: data.conversationId,
+            contactId: data.contactId,
+            optedOut: data.optedOut,
+          });
+        } catch {
+          // Malformed frame — ignore.
+        }
+      });
+
+      es.addEventListener('call.missed', (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data) as {
+            conversationId: string;
+            callerName: string;
+            e164: string;
+            at?: string;
+          };
+          if (data.at) this.lastEventAt = data.at;
+          this.emit({
+            type: 'call.missed',
+            conversationId: data.conversationId,
+            callerName: data.callerName,
+            e164: data.e164,
+          });
+        } catch {
+          // Malformed frame — ignore.
+        }
+      });
+
+      es.addEventListener('knowledge.changed', (ev: MessageEvent<string>) => {
+        try {
+          const data = JSON.parse(ev.data) as { at?: string };
+          if (data.at) this.lastEventAt = data.at;
+          this.emit({ type: 'knowledge.changed' });
+        } catch {
+          // Malformed frame — ignore.
+        }
+      });
+
       es.onerror = () => {
         // Missing/failing backend: degrade to a silent no-op.
         this.closeStream();
@@ -120,6 +284,8 @@ export class HttpClient implements DataClient {
       headers: {
         'content-type': 'application/json',
         'x-tenant-id': this.tenantId,
+        // Optional bearer auth: only attached when VITE_API_TOKEN is set.
+        ...(this.authToken ? { authorization: `Bearer ${this.authToken}` } : {}),
         ...(init?.headers ?? {}),
       },
     });
@@ -293,6 +459,9 @@ export class HttpClient implements DataClient {
     const raw = await this.req<Omit<ThreadBrief, 'contactId' | 'conversationId'>>(
       `/api/tools/thread_brief/${encodeURIComponent(contactId)}`,
     );
+    // conversationId: the thread_brief route keys on contactId and does not return
+    // a conversationId, so deep-linking from a brief to the exact thread isn't
+    // available on a live install until the backend surfaces one here.
     return { contactId, conversationId: null, ...raw };
   }
 

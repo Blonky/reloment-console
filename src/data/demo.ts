@@ -66,6 +66,7 @@ import {
   OUTCOMES,
   PLAYBOOK_HISTORY,
   PLAYBOOKS,
+  TENANT_NAME,
   THREADS,
   TONE_PROFILE,
   auditTime,
@@ -331,6 +332,14 @@ export class DemoClient implements DataClient {
   // with what the demo gate decides (see DataClient.now).
   now(): number {
     return DEMO_NOW.getTime();
+  }
+
+  // The tenant identity card — the pinned Hartley fixtures, so the demo sidebar
+  // reads exactly as it always has (name + the same line number).
+  tenant(): Promise<{ name: string; line: string }> {
+    // Pinned fixtures, not a network read — resolve immediately so the sidebar
+    // identity paints without a flash (the value is known up front).
+    return Promise.resolve({ name: TENANT_NAME, line: LINE_DISPLAY });
   }
 
   // ── Live event feed ─────────────────────────────────────────────────────────

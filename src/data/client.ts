@@ -46,6 +46,11 @@ export interface DataClient {
   // gate decides (quiet hours); http returns the real clock.
   now(): number;
 
+  // The tenant identity for the sidebar card: the agency's display name and its
+  // pre-formatted line number. Demo returns the pinned Hartley fixtures; http
+  // reads GET /api/tenant so a real install shows its OWN name, never Hartley.
+  tenant(): Promise<{ name: string; line: string }>;
+
   // Live event feed (models the provider's SSE stream). subscribe() returns an
   // unsubscribe function; the feed carries notifications (typing, inbound,
   // drafts, sends, consent changes), not the store — reads remain authoritative.

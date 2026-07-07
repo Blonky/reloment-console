@@ -1,7 +1,6 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from '../components/index.ts';
-import { LINE_DISPLAY } from '../data/fixtures.ts';
 import { useClient } from './ClientContext.tsx';
 import { useLiveData } from './LiveData.tsx';
 import styles from './Sidebar.module.css';
@@ -74,8 +73,6 @@ const ITEMS: NavItem[] = [
   { to: '/agent', label: 'Agent', icon: AgentIcon },
   { to: '/insights', label: 'Insights', icon: InsightsIcon },
 ];
-
-const TENANT = 'Hartley Insurance Group';
 
 // Show ⌘K on Apple platforms, Ctrl K elsewhere.
 const isMac =
@@ -218,15 +215,34 @@ export function SettingsRow({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 // The tenant card — a compact white pill, pinned to the bottom of the sidebar /
-// drawer below the Chats section (§4).
+// drawer below the Chats section (§4). Identity (name + line) comes through the
+// DataClient seam: demo returns the pinned Hartley fixtures (so this reads exactly
+// as before), http reads GET /api/tenant so a real install shows its OWN agency.
 export function TenantCard() {
+  const client = useClient();
+  const [tenant, setTenant] = useState<{ name: string; line: string } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void client.tenant().then((t) => {
+      if (alive) setTenant(t);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [client]);
+
+  // Until the identity loads, show nothing rather than a wrong placeholder name.
+  const name = tenant?.name ?? '';
+  const line = tenant?.line ?? '';
+
   return (
     <div className={styles.footer}>
       <div className={styles.tenant}>
-        <Avatar name={TENANT} size="sm" />
+        <Avatar name={name} size="sm" />
         <div className={styles.tenantText}>
-          <span className={styles.tenantName}>{TENANT}</span>
-          <span className={`${styles.tenantMeta} tnum`}>{LINE_DISPLAY}</span>
+          <span className={styles.tenantName}>{name}</span>
+          <span className={`${styles.tenantMeta} tnum`}>{line}</span>
         </div>
       </div>
     </div>
