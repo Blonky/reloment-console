@@ -286,7 +286,9 @@ const priyaThread: FixtureThread = {
       'outbound',
       'Hey Priya, your home quote from June is about to expire. Want me to have Tom refresh the numbers?',
       -1450,
-      { channel: 'imessage' },
+      // A cold first touch — SMS opens the door (round-22 policy); her reply below
+      // is what would upgrade the thread to iMessage.
+      { channel: 'sms' },
     ),
     msg('inbound', 'Oh right! yes please, we’re still deciding 🙏', -1440),
   ],

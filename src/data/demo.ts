@@ -294,12 +294,19 @@ function cloneThread(t: FixtureThread): FixtureThread {
   };
 }
 
-// Pick the delivered-as channel from the contact's capability ladder.
-// iMessage-capable → iMessage; otherwise SMS. (RCS is honest but not in the
-// Hartley book; the ladder is imessage → rcs → sms in general.)
-function pickChannel(contactId: string): Exclude<Channel, null> {
-  const c = contactById(contactId);
-  return c?.imessageCapable ? 'imessage' : 'sms';
+// Pick the delivered-as channel with the SAME policy the platform enforces
+// (services.resolveChannelPreference, round-22): SMS opens the door, iMessage
+// carries the conversation. A non-iMessage contact is always SMS. An iMessage-
+// capable contact still gets SMS on the FIRST outbound — before they have
+// replied — because a cold iMessage open is rate-limited and deliverability-
+// risky; once they reply (an inbound lands on the thread) the channel upgrades
+// to iMessage. So a missed-call auto-ack goes out SMS, and the reply after the
+// customer answers rides iMessage — visible via the bubble's ChannelBadge.
+function pickChannel(t: { contactId: string; messages: { direction: string }[] }): Exclude<Channel, null> {
+  const c = contactById(t.contactId);
+  if (!c?.imessageCapable) return 'sms';
+  const hasReplied = t.messages.some((m) => m.direction === 'inbound');
+  return hasReplied ? 'imessage' : 'sms';
 }
 
 // A realistic media part per document type — the shape mirrors the provider's
@@ -578,7 +585,7 @@ export class DemoClient implements DataClient {
       draft.status = `blocked_${decision.auditReason}`;
       return delay({ sent: false, decision });
     }
-    const channel = pickChannel(t.contactId);
+    const channel = pickChannel(t);
     draft.status = 'sent';
     draft.channel_accepted = channel;
     this.appendAudit('owner', 'message.sent', `channel:${channel}`);
@@ -1192,7 +1199,7 @@ export class DemoClient implements DataClient {
         const decision = this.gate(contactId, 'transactional');
         this.appendAudit('send_gate', 'send_gate', decision.auditReason);
         if (decision.decision !== 'ALLOW') return;
-        const channel = pickChannel(contactId);
+        const channel = pickChannel(t!);
         const sent = this.appendSent(t!, MISSED_CALL_ACK_BODY, channel);
         this.appendAudit('missed_call_agent', 'message.sent', `auto_ack channel:${channel}`);
         this.emit({ type: 'message.sent', conversationId, message: this.toThreadMessage(sent) });
@@ -1229,7 +1236,7 @@ export class DemoClient implements DataClient {
       this.emit({ type: 'suggestion.updated', conversationId });
       return delay({ ok: false, blockedReason: decision.auditReason });
     }
-    const channel = pickChannel(t.contactId);
+    const channel = pickChannel(t);
     const sent = this.appendSent(t, body, channel);
     // The human answered — drop any orphan held draft so no stale "Held" remains.
     this.clearHeldDrafts(t);
@@ -1262,7 +1269,7 @@ export class DemoClient implements DataClient {
       // Blocked silently — no outbound, no reply simulated.
       return delay(undefined);
     }
-    const channel = pickChannel(t.contactId);
+    const channel = pickChannel(t);
     const ask = this.appendSent(
       t,
       `Could you text over a quick photo of your ${docType}? A phone pic works great.`,
@@ -1345,7 +1352,7 @@ export class DemoClient implements DataClient {
         : `Here’s a secure link to take care of your premium whenever you’re ready, ${first}.`;
     void cal;
 
-    const channel = pickChannel(t.contactId);
+    const channel = pickChannel(t);
     const sent = this.appendSentWithParts(t, body, channel, [link]);
     this.appendAudit('owner', 'message.sent', `link:${kind} channel:${channel}`);
     this.emit({ type: 'message.sent', conversationId, message: this.toThreadMessage(sent) });

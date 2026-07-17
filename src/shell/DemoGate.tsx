@@ -108,7 +108,7 @@ export default function DemoGate({ children }: { children: React.ReactNode }) {
           {error ? "That code doesn't match. Try again." : ''}
         </div>
       </div>
-      <div className={styles.footer}>Reloment — governed texting concierge</div>
+      <div className={styles.footer}>Reloment — a personal account manager for every client</div>
     </div>
   );
 }
