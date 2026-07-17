@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from '../components/index.ts';
+import type { AuthState } from '../data/types.ts';
 import { useClient } from './ClientContext.tsx';
 import { useLiveData } from './LiveData.tsx';
 import styles from './Sidebar.module.css';
@@ -221,12 +222,24 @@ export function SettingsRow({ onNavigate }: { onNavigate?: () => void }) {
 export function TenantCard() {
   const client = useClient();
   const [tenant, setTenant] = useState<{ name: string; line: string } | null>(null);
+  // Who is signed in, and whether this install has sign-in at all. A demo/dev
+  // backend answers authRequired:false and no sign-out row appears — there is
+  // nothing to sign out OF, and offering it would be a lie.
+  const [auth, setAuth] = useState<AuthState | null>(null);
 
   useEffect(() => {
     let alive = true;
     void client.tenant().then((t) => {
       if (alive) setTenant(t);
     });
+    void client
+      .me()
+      .then((m) => {
+        if (alive) setAuth(m);
+      })
+      .catch(() => {
+        /* the shell already handles an unreachable backend (AuthGate) */
+      });
     return () => {
       alive = false;
     };
@@ -235,6 +248,15 @@ export function TenantCard() {
   // Until the identity loads, show nothing rather than a wrong placeholder name.
   const name = tenant?.name ?? '';
   const line = tenant?.line ?? '';
+  const signedIn = auth?.authRequired === true && auth.user !== null;
+
+  async function signOut() {
+    await client.logout();
+    // Hard reload rather than a state flip: it drops every cached read and any
+    // live stream in one move, so nothing from the previous session lingers on
+    // screen. The server has already destroyed the session either way.
+    window.location.reload();
+  }
 
   return (
     <div className={styles.footer}>
@@ -245,6 +267,12 @@ export function TenantCard() {
           <span className={`${styles.tenantMeta} tnum`}>{line}</span>
         </div>
       </div>
+      {signedIn && (
+        <button className={styles.signOut} type="button" onClick={signOut}>
+          <span className={styles.signOutWho}>{auth!.user!.email}</span>
+          <span className={styles.signOutAction}>Sign out</span>
+        </button>
+      )}
     </div>
   );
 }

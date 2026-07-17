@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { createClient } from './data/client.ts';
 import { ClientProvider } from './shell/ClientContext.tsx';
+import AuthGate from './shell/AuthGate.tsx';
 import AppShell from './shell/AppShell.tsx';
 import { Skeleton } from './components/index.ts';
 
@@ -48,6 +49,9 @@ const TITLES: Record<string, string> = {
 export function App() {
   const client = useMemo(createClient, []);
   const [killSwitch, setKillSwitchState] = useState(false);
+  // Bumped when a sign-in completes, so the reads below run again with a session
+  // instead of staying stuck on whatever the anonymous attempt returned.
+  const [authNonce, setAuthNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,12 +61,12 @@ export function App() {
         if (!cancelled) setKillSwitchState(pulse.killSwitch);
       })
       .catch(() => {
-        /* ignore — the shell tolerates an unreachable home read */
+        /* ignore — the shell tolerates an unreachable (or unauthenticated) read */
       });
     return () => {
       cancelled = true;
     };
-  }, [client]);
+  }, [client, authNonce]);
 
   const setKillSwitch = useCallback((on: boolean) => {
     setKillSwitchState(on);
@@ -73,6 +77,10 @@ export function App() {
 
   return (
     <ClientProvider client={client} killSwitch={killSwitch} setKillSwitch={setKillSwitch}>
+      {/* Nothing renders until the backend says who we are. A real install shows
+          the sign-in screen here; a demo/dev one reports authRequired:false and
+          falls straight through. */}
+      <AuthGate onAuthed={() => setAuthNonce((n) => n + 1)}>
       <AppShell killSwitch={killSwitch} mode={client.mode} title={title}>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
@@ -90,6 +98,7 @@ export function App() {
           </Routes>
         </Suspense>
       </AppShell>
+      </AuthGate>
     </ClientProvider>
   );
 }

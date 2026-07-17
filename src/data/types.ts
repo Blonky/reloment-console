@@ -67,6 +67,24 @@ export type Channel = 'imessage' | 'rcs' | 'sms' | null;
 // webhooks or an SSE stream; typing indicators are best-effort "UI signals
 // before an agent or automation sends a follow-up". consent.changed is
 // Reloment's own layer (the provider has no STOP/START keyword handling).
+// ── Auth (r24) ──────────────────────────────────────────────────────────────
+// The console never handles a token: the session lives in an httpOnly cookie the
+// browser attaches and JS cannot read. All the UI knows is WHO it is and whether
+// a login is required at all (a dev/demo install answers authRequired:false).
+export interface AuthState {
+  authRequired: boolean;
+  user: { email: string; displayName: string; tenantName: string } | null;
+}
+
+// Thrown by the http client on a 401 so the shell can show the login screen
+// rather than an error card. A 401 is a state, not a failure.
+export class UnauthorizedError extends Error {
+  constructor(where: string) {
+    super(`unauthorized: ${where}`);
+    this.name = 'UnauthorizedError';
+  }
+}
+
 export type FeedEvent =
   | { type: 'typing'; conversationId: string; who: 'customer' | 'agent'; state: 'typing' | 'stopped' }
   | { type: 'message.received'; conversationId: string; message: ThreadMessage }

@@ -1,0 +1,139 @@
+/* Sign-in — the same visual language as the demo gate (same wordmark weight,
+   same card rise, same pill inputs), so an install and the preview feel like one
+   product. Stacked rather than inline: two labelled fields, not a single code. */
+
+.wrap {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 24px;
+  z-index: 1000;
+}
+
+.card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  animation: rise 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.brand {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 32px;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.title {
+  margin: 26px 0 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 520;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.sub {
+  margin: 6px 0 22px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.label + .input {
+  margin-bottom: 12px;
+}
+
+.input {
+  height: 46px;
+  padding: 0 16px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.input:disabled {
+  opacity: 0.6;
+}
+
+.submit {
+  margin-top: 8px;
+  height: 46px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: opacity 140ms ease, transform 120ms ease;
+}
+
+.submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.submit:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.submit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.errorLine {
+  min-height: 20px;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #b4462f;
+  text-wrap: balance;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+  }
+}

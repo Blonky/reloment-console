@@ -3,6 +3,7 @@
 // set, else the deterministic DemoClient (the default open-source experience).
 
 import type {
+  AuthState,
   AgentAsk,
   AgentChatMessage,
   AgentProfile,
@@ -49,6 +50,14 @@ export interface DataClient {
   // pre-formatted line number. Demo returns the pinned Hartley fixtures; http
   // reads GET /api/tenant so a real install shows its OWN name, never Hartley.
   tenant(): Promise<{ name: string; line: string }>;
+
+  // ── Auth (r24) ────────────────────────────────────────────────────────────
+  // The console never holds a token: the session is an httpOnly cookie the
+  // browser attaches. me() reports who we are (and whether this install even
+  // requires a login — a dev/demo backend answers authRequired:false).
+  me(): Promise<AuthState>;
+  login(email: string, password: string): Promise<{ ok: true } | { ok: false; error: string; retryAfterSec?: number }>;
+  logout(): Promise<void>;
 
   // Live event feed (models the provider's SSE stream). subscribe() returns an
   // unsubscribe function; the feed carries notifications (typing, inbound,

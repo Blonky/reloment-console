@@ -4,7 +4,9 @@
 // this file does the thin unwrapping (e.g. { items } → QueueItem[]).
 
 import type { DataClient } from './client.ts';
+import { UnauthorizedError } from './types.ts';
 import type {
+  AuthState,
   AgentAsk,
   AgentChatMessage,
   AgentProfile,
@@ -51,6 +53,46 @@ export class HttpClient implements DataClient {
     return Date.now();
   }
 
+  // ── Auth (r24) ────────────────────────────────────────────────────────────
+  // No token ever touches this client: login sets an httpOnly cookie the browser
+  // stores and attaches, and which JavaScript cannot read.
+  async me(): Promise<AuthState> {
+    try {
+      return await this.req<AuthState>('/api/auth/me');
+    } catch (err) {
+      // 401 = no session → the shell shows the login screen. Any OTHER failure
+      // (backend down) must NOT masquerade as "logged out", so it rethrows.
+      if (err instanceof UnauthorizedError) return { authRequired: true, user: null };
+      throw err;
+    }
+  }
+
+  async login(
+    email: string,
+    password: string,
+  ): Promise<{ ok: true } | { ok: false; error: string; retryAfterSec?: number }> {
+    const res = await fetch(this.baseUrl.replace(/\/$/, '') + '/api/auth/login', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.ok) return { ok: true };
+    const body = await res.json().catch(() => ({}) as any);
+    return { ok: false, error: String(body?.error ?? 'invalid_credentials'), retryAfterSec: body?.retryAfterSec };
+  }
+
+  async logout(): Promise<void> {
+    await fetch(this.baseUrl.replace(/\/$/, '') + '/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    }).catch(() => undefined);
+    // Drop the live stream: it authenticated with the session we just ended.
+    this.closeStream();
+  }
+
   constructor(
     private readonly baseUrl: string,
     private readonly tenantId: string,
@@ -88,13 +130,18 @@ export class HttpClient implements DataClient {
     if (this.eventSource) return;
     try {
       const base = this.baseUrl.replace(/\/$/, '');
-      // The browser can't attach the x-tenant-id header to an EventSource, so the
-      // tenant travels as a query param the backend reads instead. ?since resumes
-      // the feed; ?token authenticates when optional bearer auth is enabled.
+      // An EventSource can't set headers, but it DOES send cookies when
+      // withCredentials is on — which is how the live stream authenticates under
+      // session auth (and why the stream needs no token in the URL: a token in a
+      // query string lands in logs and referrers; a cookie doesn't).
+      // ?tenant is the legacy AUTH_REQUIRED=false path only — with auth ON the
+      // server IGNORES it and takes the tenant from the session. ?since resumes.
       const params = new URLSearchParams({ tenant: this.tenantId });
       if (this.lastEventAt) params.set('since', this.lastEventAt);
       if (this.authToken) params.set('token', this.authToken);
-      const es = new EventSource(`${base}/api/v1/events/stream?${params.toString()}`);
+      const es = new EventSource(`${base}/api/v1/events/stream?${params.toString()}`, {
+        withCredentials: true,
+      });
 
       // provider SSE feed: `message.received` carries an inbound ThreadMessage.
       es.addEventListener('message.received', (ev: MessageEvent<string>) => {
@@ -290,15 +337,24 @@ export class HttpClient implements DataClient {
   private async req<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(this.baseUrl.replace(/\/$/, '') + path, {
       ...init,
+      // Send the httpOnly session cookie. The browser attaches and guards it —
+      // this client never sees, stores, or could leak the token. (x-tenant-id is
+      // still sent for AUTH_REQUIRED=false dev installs; with auth ON the server
+      // IGNORES it and takes the tenant from the session.)
+      credentials: 'include',
       headers: {
         'content-type': 'application/json',
         'x-tenant-id': this.tenantId,
-        // Optional bearer auth: only attached when VITE_API_TOKEN is set.
+        // Legacy shared-token installs only; mutually exclusive with session auth.
         ...(this.authToken ? { authorization: `Bearer ${this.authToken}` } : {}),
         ...(init?.headers ?? {}),
       },
     });
     if (!res.ok) {
+      // A 401 is not a generic failure — it means "no session". Surface it as a
+      // typed error so the shell can show the login screen instead of an
+      // alarming red error card.
+      if (res.status === 401) throw new UnauthorizedError(`${init?.method ?? 'GET'} ${path}`);
       let detail = '';
       try {
         detail = JSON.stringify(await res.json());

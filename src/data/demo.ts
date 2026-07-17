@@ -14,6 +14,7 @@
 
 import type { DataClient } from './client.ts';
 import type {
+  AuthState,
   AgentAsk,
   AgentChatMessage,
   AgentProfile,
@@ -345,6 +346,24 @@ export class DemoClient implements DataClient {
     // Pinned fixtures, not a network read — resolve immediately so the sidebar
     // identity paints without a flash (the value is known up front).
     return Promise.resolve({ name: TENANT_NAME, line: LINE_DISPLAY });
+  }
+
+  // ── Auth (r24) ────────────────────────────────────────────────────────────
+  // The demo has no backend and therefore no session: it reports authRequired
+  // false, so the shell renders straight through with no login screen. (The
+  // public preview's own passcode gate is DemoGate — a separate, honest thing:
+  // it keeps the demo from being openly browsable and is explicitly NOT
+  // security. Real auth is the platform's.)
+  me(): Promise<AuthState> {
+    return Promise.resolve({ authRequired: false, user: null });
+  }
+
+  login(): Promise<{ ok: true }> {
+    return Promise.resolve({ ok: true });
+  }
+
+  logout(): Promise<void> {
+    return Promise.resolve();
   }
 
   // ── Live event feed ─────────────────────────────────────────────────────────

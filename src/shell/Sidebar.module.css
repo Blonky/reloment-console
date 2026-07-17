@@ -372,6 +372,56 @@
   padding-top: 12px;
 }
 
+/* Sign out — a quiet row UNDER the tenant pill: the signed-in address (so you
+   can see WHO this browser is, which matters on a shared office machine) with
+   the action revealed on hover/focus. Deliberately low-contrast: leaving is not
+   an operating surface, but it must always be reachable. */
+.signOut {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.signOut:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.signOut:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.signOutWho {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signOutAction {
+  flex: none;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.signOut:hover .signOutAction {
+  opacity: 1;
+}
+
 /* Tenant block = compact white pill card (§4). */
 .tenant {
   display: flex;
