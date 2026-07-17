@@ -49,6 +49,17 @@ export default function AuthGate({
     void check();
   }, [check]);
 
+  // A session can die WHILE the console is open — it expires, an admin disables
+  // the account, someone signs out elsewhere. Checking only on mount left the app
+  // fully rendered with every read failing behind it: a confident, false empty
+  // state shown to someone who is no longer signed in. Any 401 now sends them
+  // back to sign-in immediately.
+  useEffect(() => {
+    return client.onUnauthorized(() => {
+      setStatus((s) => (s.kind === 'authed' ? { kind: 'anonymous' } : s));
+    });
+  }, [client]);
+
   if (status.kind === 'checking') return null;
 
   if (status.kind === 'unreachable') {

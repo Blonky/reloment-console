@@ -58,6 +58,12 @@ export interface DataClient {
   me(): Promise<AuthState>;
   login(email: string, password: string): Promise<{ ok: true } | { ok: false; error: string; retryAfterSec?: number }>;
   logout(): Promise<void>;
+  // Fires when ANY request 401s after we thought we were signed in — a session
+  // that expired or was revoked mid-shift. Without it the shell keeps its
+  // authenticated render and every read silently fails, showing a confident and
+  // FALSE empty state ("Nothing waiting on you") to someone who is logged out.
+  // Returns an unsubscribe fn.
+  onUnauthorized(handler: () => void): () => void;
 
   // Live event feed (models the provider's SSE stream). subscribe() returns an
   // unsubscribe function; the feed carries notifications (typing, inbound,

@@ -366,6 +366,11 @@ export class DemoClient implements DataClient {
     return Promise.resolve();
   }
 
+  // The demo has no session to lose, so nothing ever fires this.
+  onUnauthorized(): () => void {
+    return () => {};
+  }
+
   // ── Live event feed ─────────────────────────────────────────────────────────
   // A simple in-memory emitter set. subscribe() returns an unsubscribe fn.
   private feedHandlers = new Set<(e: FeedEvent) => void>();

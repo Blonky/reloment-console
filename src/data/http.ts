@@ -44,10 +44,13 @@ import type {
 export class HttpClient implements DataClient {
   readonly mode = 'http' as const;
 
-  // Optional bearer-token auth (default OFF). The backend enables it only when it
-  // sets API_AUTH_TOKEN; a real install then sets VITE_API_TOKEN to match. When
-  // unset (the default, incl. the demo) we send nothing — behavior unchanged.
-  private readonly authToken = import.meta.env.VITE_API_TOKEN;
+  // NOTE: there is deliberately NO token field on this client. A build-time
+  // VITE_API_TOKEN used to be inlined here — which put a live shared secret in a
+  // PUBLIC JS bundle every visitor can read, and then repeated it in the SSE URL
+  // query string (where it lands in access logs and Referer headers). A browser
+  // cannot keep a secret, so it is given none: the session is an httpOnly cookie
+  // the browser holds and JS cannot read. A machine-to-machine install that still
+  // wants API_AUTH_TOKEN talks to the API directly, not through this console.
 
   now(): number {
     return Date.now();
@@ -91,6 +94,23 @@ export class HttpClient implements DataClient {
     }).catch(() => undefined);
     // Drop the live stream: it authenticated with the session we just ended.
     this.closeStream();
+  }
+
+  // Session-lost listeners (see DataClient.onUnauthorized).
+  private unauthorizedHandlers = new Set<() => void>();
+
+  onUnauthorized(handler: () => void): () => void {
+    this.unauthorizedHandlers.add(handler);
+    return () => {
+      this.unauthorizedHandlers.delete(handler);
+    };
+  }
+
+  private notifyUnauthorized(): void {
+    // The stream authenticated with the session that just died; drop it so it
+    // stops silently retrying against a dead cookie.
+    this.closeStream();
+    for (const h of this.unauthorizedHandlers) h();
   }
 
   constructor(
@@ -138,7 +158,6 @@ export class HttpClient implements DataClient {
       // server IGNORES it and takes the tenant from the session. ?since resumes.
       const params = new URLSearchParams({ tenant: this.tenantId });
       if (this.lastEventAt) params.set('since', this.lastEventAt);
-      if (this.authToken) params.set('token', this.authToken);
       const es = new EventSource(`${base}/api/v1/events/stream?${params.toString()}`, {
         withCredentials: true,
       });
@@ -345,16 +364,20 @@ export class HttpClient implements DataClient {
       headers: {
         'content-type': 'application/json',
         'x-tenant-id': this.tenantId,
-        // Legacy shared-token installs only; mutually exclusive with session auth.
-        ...(this.authToken ? { authorization: `Bearer ${this.authToken}` } : {}),
         ...(init?.headers ?? {}),
       },
     });
     if (!res.ok) {
       // A 401 is not a generic failure — it means "no session". Surface it as a
       // typed error so the shell can show the login screen instead of an
-      // alarming red error card.
-      if (res.status === 401) throw new UnauthorizedError(`${init?.method ?? 'GET'} ${path}`);
+      // alarming red error card, and tell the shell so a session that dies
+      // MID-SHIFT sends the operator back to sign-in rather than leaving them
+      // staring at a confidently empty screen. /api/auth/me is exempt: its 401
+      // is the ordinary "not signed in yet" answer AuthGate asks for on purpose.
+      if (res.status === 401) {
+        if (path !== '/api/auth/me') this.notifyUnauthorized();
+        throw new UnauthorizedError(`${init?.method ?? 'GET'} ${path}`);
+      }
       let detail = '';
       try {
         detail = JSON.stringify(await res.json());
