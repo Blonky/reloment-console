@@ -574,7 +574,7 @@ export class HttpClient implements DataClient {
   // an honest untuned placeholder with the fixed guardrails still shown.
   async agentProfile(): Promise<AgentProfile> {
     return this.req<AgentProfile>('/api/agent-profile').catch(() => ({
-      name: 'Your concierge',
+      name: 'Your account manager',
       line: '—',
       trainedOn: 'Not yet tuned — connect the platform to train on your conversations.',
       traits: [],
@@ -607,7 +607,7 @@ export class HttpClient implements DataClient {
   // the optimistic UI stands until the next read).
   async agentVoice(): Promise<AgentVoice> {
     return this.req<AgentVoice>('/api/agent/voice').catch(() => ({
-      name: 'Your concierge',
+      name: 'Your account manager',
       traits: [],
       instructions: '',
     }));

@@ -2979,7 +2979,7 @@ export class DemoClient implements DataClient {
     const at = this.stamp();
     return {
       voice: {
-        name: 'Hartley concierge',
+        name: 'Hartley account manager',
         traits: [...TONE_PROFILE.traits],
         instructions: '',
       },
